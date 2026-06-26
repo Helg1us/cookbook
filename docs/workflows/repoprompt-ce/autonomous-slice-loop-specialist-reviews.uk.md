@@ -18,8 +18,8 @@ flowchart TD
   E -->|Plan exists, not approved| I["Фаза 4: Plan Review loop"]
   E -->|Plan approved, no engineer spec| J["Фаза 5: Engineer Oracle spec"]
   E -->|Engineer spec exists, no orchestration row| K["Фаза 6: Orchestrate implementation"]
-  E -->|Uncommitted implementation, no clean Oracle verdict| L["Фаза 7: Implementation Review loop"]
-  E -->|Clean Oracle verdict, no commit hash| Y["Фаза 8: Commit"]
+  E -->|Uncommitted first-class deliverables, no clean commit-readiness verdict| L["Фаза 7: Review loop"]
+  E -->|Clean commit-readiness verdict, no commit hash| Y["Фаза 8: Commit"]
   E -->|Commit exists, no next-slice verdict| Z["Фаза 9: Next-slice gate"]
   E -->|NEXT_SLICE з повним contract| AC["Створити scoreboard наступного slice"]
   E -->|NEXT_SLICE без contract| AD["Повернутися до Фази 1"]
@@ -70,8 +70,15 @@ flowchart TD
 
   L --> L1["Git status і diff"]
   L1 --> L2["Виключити generated artifacts, unless explicit include"]
-  L2 --> M1["Standard Review implementation"]
-  M1 --> M2["rp-ponytail-review"]
+  L2 --> L3["Класифікувати review surfaces"]
+  L3 --> L6["Standard Review усіх first-class deliverables artifact-appropriate"]
+  L6 --> L4{"Є implementation surface?"}
+  L4 -->|Так| M2["rp-ponytail-review"]
+  L4 -->|Ні, docs/evidence only| M0A["Записати Specialist review log: not applicable: no implementation surface"]
+  L4 -->|Ambiguous| L5["Oracle класифікує surface"]
+  L5 --> L4
+
+  M0A --> U
   M2 --> M2A{"Ponytail unavailable?"}
   M2A -->|Так| M2B["Записати reason; Oracle: чи missing lens blocks?"]
   M2A -->|Ні| M3["rp-thermo-nuclear-code-quality-review"]
@@ -88,7 +95,7 @@ flowchart TD
 
   N --> N1{"Finding routing"}
   N1 -->|Mandatory category| V["Фіксити один найважливіший blocker"]
-  N1 -->|Blocker candidate, simplification, question| U["Oracle final implementation gate"]
+  N1 -->|Blocker candidate, simplification, question| U["Oracle final commit-readiness gate"]
   N1 -->|P2, P3 або ambiguous| O["Dynamic Oracle disposition gate"]
 
   O --> O1{"Oracle disposition"}
@@ -103,10 +110,10 @@ flowchart TD
   T --> U
 
   V --> V1["Targeted validation"]
-  V1 --> V2["Rerun Standard Review + affected specialist lens"]
+  V1 --> V2["Rerun Standard Review + applicable specialist lens"]
   V2 --> U
 
-  U --> U1{"Clean enough?"}
+  U --> U1{"Clean enough to commit?"}
   U1 -->|Ні, є blocker| V
   U1 -->|Cannot tell| W["Зібрати targeted evidence"]
   W --> V2
@@ -136,7 +143,7 @@ flowchart TD
 
 ## Oracle Parallelism
 
-Oracle-виклики дозволені, але workflow планує їх як queue: максимум два active Oracle conversations або Oracle-export-producing calls одночасно. Dependent gates залишаються serial: implementation spec не стартує до plan approval, commit readiness не стартує до implementation review, next-slice gate не стартує до commit.
+Oracle-виклики дозволені, але workflow планує їх як queue: максимум два active Oracle conversations або Oracle-export-producing calls одночасно. Dependent gates залишаються serial: implementation spec не стартує до plan approval, commit readiness не стартує до Phase 7 review, next-slice gate не стартує до commit.
 
 ```mermaid
 flowchart TD
@@ -150,14 +157,14 @@ flowchart TD
 
   F --> G{"Gate dependency"}
   G -->|Plan approved| H["Engineer spec may start"]
-  G -->|Implementation review complete| I["Commit readiness may start"]
+  G -->|Phase 7 review complete| I["Commit readiness may start"]
   G -->|Commit complete| J["Next-slice gate may start"]
 
   K["Unsafe pair"] --> L["Wait for dependency first"]
   L --> D
 ```
 
-Safe parallel pairs include independent critiques of the same artifact, such as plan gate plus design critique, or implementation cleanliness plus validation evidence critique. Unsafe pairs are dependency chains, such as next-slice before commit.
+Safe parallel pairs include independent critiques of the same artifact, such as plan gate plus design critique, or commit-readiness plus validation evidence critique. Unsafe pairs are dependency chains, such as next-slice before commit.
 
 ## Safety Gates
 
@@ -221,7 +228,7 @@ flowchart TD
   C --> G["Record in Validation evidence"]
   E --> G
   F --> G
-  G --> H["Oracle implementation gate consumes evidence"]
+  G --> H["Oracle commit-readiness gate consumes evidence"]
 ```
 
 ## Пріоритети review findings
@@ -260,8 +267,8 @@ flowchart TD
   H --> L
 
   L --> M["Targeted validation"]
-  M --> N["Rerun Standard Review + affected specialist lens"]
-  N --> O["Oracle final implementation gate"]
+  M --> N["Rerun Standard Review + applicable specialist lens"]
+  N --> O["Oracle final commit-readiness gate"]
 
   F --> O
   I --> P["Записати disposition; без зайвого broad loop"]
@@ -296,7 +303,7 @@ flowchart TD
 
 Generated workflow artifacts за замовчуванням виключаються з:
 
-- implementation diff;
+- Phase 7 changed-file scope;
 - Standard Review;
 - specialist reviews;
 - Oracle changed-file selection;
@@ -312,11 +319,19 @@ Generated workflow artifacts:
 - `docs/investigation/`
 - `docs/investigations/`
 
+Перед specialist reviews first-class deliverables класифікуються за review surface:
+
+- **Implementation surface**: code, behavior/architecture tests, config, scripts, migrations, runtime files, або active workflow definitions у `workflows/repoprompt-ce/*.md`, якщо зміна впливає на phases, gates, Oracle usage, review loops, validation, artifact policy, commit behavior, next-slice behavior або safety rules.
+- **Docs/evidence surface**: Markdown docs, Mermaid diagrams, README/user docs, investigations, review reports, plans або generated evidence, які не змінюють runtime behavior чи operational workflow behavior.
+- Implementation surfaces проходять Standard Review, Ponytail, Thermo та Oracle commit-readiness gate.
+- Docs/evidence surfaces проходять docs-focused Standard Review та Oracle commit-readiness gate; Ponytail/Thermo за замовчуванням не запускаються.
+- Ambiguous cases спочатку класифікує Oracle.
+
 ```mermaid
 flowchart TD
   A["Changed file"] --> B{"Generated workflow artifact?"}
 
-  B -->|Ні| C["Implementation або intentional repo file"]
+  B -->|Ні| C["First-class deliverable"]
   B -->|Так| D{"Slice явно включає docs або workflow artifacts?"}
 
   D -->|Так| E["Review як first-class deliverable"]
@@ -329,6 +344,11 @@ flowchart TD
   G --> G4["Validation evidence"]
   G --> G5["Oracle context"]
 
-  C --> H["Review і commit за звичайними правилами"]
+  C --> H["Класифікувати review surface"]
   E --> H
+  H --> I{"Implementation surface?"}
+  I -->|Так| J["Standard Review + Ponytail + Thermo + Oracle"]
+  I -->|Ні, docs/evidence| K["Docs-focused Review + Oracle"]
+  I -->|Ambiguous| L["Oracle класифікує surface"]
+  L --> I
 ```

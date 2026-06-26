@@ -3,7 +3,7 @@ id: 6ca4f0fd-1429-4bc3-882e-8854f8131b7b
 name: "Autonomous Slice Loop + Specialist Reviews"
 icon: "arrow.triangle.2.circlepath"
 tooltip: "Autonomous Oracle-gated slice loop with ponytail and thermo-nuclear specialist review lenses"
-description: "ASL variant that keeps the same autonomous slice loop and adds rp-ponytail-review plus rp-thermo-nuclear-code-quality-review in the implementation review gate."
+description: "ASL variant that keeps the same autonomous slice loop and adds rp-ponytail-review plus rp-thermo-nuclear-code-quality-review in the Phase 7 commit-readiness review gate."
 ---
 
 # Autonomous Slice Loop + Specialist Reviews
@@ -19,10 +19,10 @@ This workflow is delegation-heavy and Oracle-heavy by design. Mapping, external 
 - **You (the agent)**: Orchestrate. Resume prior runs, translate the prompt, fan out scouts, keep the Oracle queue at max 2, maintain the scoreboard, route verdicts, commit each clean slice, and loop until the whole original goal is complete.
 - **Explore agents** (`agent_run` with `model_id:"explore"`): Read-only scouts for prior art, scope, conventions, validation, `exa-cli docs`, and `exa-cli code-examples`.
 - **Deep Plan** (`agent_run` with `workflow_name:"Deep Plan"`): Drafts the slice plan from scouting evidence and exa-cli findings. Invoke it with the autonomous override below so it cannot stop for user involvement.
-- **Review** (`agent_run` with `workflow_name:"Review"`): Reviews plan artifacts and implementation diffs for the general correctness/scope/validation perspective. It is a reviewer, not the stop signal. Invoke it with explicit non-interactive scope.
-- **Specialist review skills** (`rp-ponytail-review`, `rp-thermo-nuclear-code-quality-review`): Run only on implementation diffs, after the standard Review and before the Oracle commit-readiness verdict. They do not replace Review and they do not review plan-only artifacts. `rp-ponytail-review` looks for removable over-engineering; `rp-thermo-nuclear-code-quality-review` looks for structural maintainability regressions.
+- **Review** (`agent_run` with `workflow_name:"Review"`): Reviews plan artifacts and first-class deliverables for the general correctness/scope/validation perspective. It is a reviewer, not the stop signal. Invoke it with explicit non-interactive scope.
+- **Specialist review skills** (`rp-ponytail-review`, `rp-thermo-nuclear-code-quality-review`): Run only on implementation surfaces, after the standard Review and before the Oracle commit-readiness verdict. They do not replace Review and they do not review plan-only or docs/evidence-only artifacts. `rp-ponytail-review` looks for removable over-engineering; `rp-thermo-nuclear-code-quality-review` looks for structural maintainability regressions.
 - **Design agents** (`model_id:"design"`): Critique plan quality, API/UX/system tradeoffs, and implementation risks. They can write reports or concise critique summaries, but Oracle remains the gate.
-- **Oracle** (`ask_oracle`): Primary reasoning engine and stop/go authority. Use it as much as possible: plan readiness, plan approval, engineer implementation spec, implementation cleanliness, commit readiness, and next-slice choice.
+- **Oracle** (`ask_oracle`): Primary reasoning engine and stop/go authority. Use it as much as possible: plan readiness, plan approval, engineer implementation spec, commit readiness, and next-slice choice.
 - **Orchestrate** (`agent_run` with `workflow_name:"Orchestrate"`): Implements the approved slice from the approved plan plus engineer Oracle spec, using TDD and validation. Invoke it with the approved artifacts and no user-interaction override.
 
 ### Core principles
@@ -40,8 +40,8 @@ This workflow is delegation-heavy and Oracle-heavy by design. Mapping, external 
 - Never prompt the user.
 - Never wait for user guidance.
 - Never start implementation before Oracle says the plan is good to go.
-- Never commit before Oracle says the implementation is clean enough.
-- Never ask Oracle for commit readiness until the standard implementation Review plus both specialist implementation reviews have been summarized, unless a specialist review is impossible and the reason is recorded.
+- Never commit before Oracle says the slice is clean enough to commit.
+- Never ask Oracle for commit readiness until the artifact-appropriate standard Review for all first-class deliverables is summarized, and, when implementation surfaces exist, both specialist implementation reviews are summarized. If no implementation surface exists, record Ponytail/Thermo as not applicable; if a required specialist review cannot run, record the reason and ask Oracle whether the missing lens blocks commit readiness.
 - Never carry Oracle-blocking must-fix items into the next slice.
 - Non-blocking P2/P3 suggestions may be carried as follow-ups only when Oracle explicitly classifies them as non-blocking for this slice.
 - P2/P3 suggestions are not automatic work items. They require an explicit disposition: fix now, do not fix, or record as follow-up/observation.
@@ -124,7 +124,7 @@ Safe parallel Oracle pairs:
 | --------------------------------------------------------- | ------------------------------------------------------- |
 | Plan gate + designer critique synthesis                   | Independent critiques of the same plan artifact         |
 | External docs synthesis + code examples synthesis         | Independent research summaries                          |
-| Implementation cleanliness + validation evidence critique | Independent review of the same completed implementation |
+| Commit-readiness + validation evidence critique           | Independent review of the same completed slice          |
 | Next-slice proposal + backlog risk critique               | Independent views after the current slice is clean      |
 
 Unsafe parallel Oracle pairs:
@@ -133,7 +133,7 @@ Unsafe parallel Oracle pairs:
 | ----------------------------------------------------- | --------------------------------------- |
 | Plan review before Deep Plan exists                   | Missing dependency                      |
 | Engineer implementation spec before plan approval     | Spec may encode rejected plan decisions |
-| Commit decision before implementation review is clean | Dirty gate                              |
+| Commit decision before Phase 7 review is clean       | Dirty gate                              |
 | Next slice before current slice commit                | Breaks slice causality                  |
 
 ## Engineer Oracle Prompt
@@ -220,8 +220,8 @@ Then classify the most recent run:
 
 | State found                                                                                                                | Resume action                                                                                                                                                           |
 | -------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Scoreboard has uncommitted implementation and no clean Oracle verdict                                                      | Resume Phase 7 implementation review loop.                                                                                                                              |
-| Oracle said implementation clean but no commit hash                                                                        | Resume Phase 8 commit.                                                                                                                                                  |
+| Scoreboard has uncommitted first-class deliverables or slice changes and no clean Oracle commit-readiness verdict          | Resume Phase 7 review loop.                                                                                                                                             |
+| Oracle said the slice is clean enough to commit but no commit hash                                                         | Resume Phase 8 commit.                                                                                                                                                  |
 | Commit hash exists and Oracle next-slice verdict says original goal is not complete and includes a complete slice contract | Create the next slice scoreboard, carry forward prior slice state, then resume Phase 2.                                                                                 |
 | Commit hash exists and Oracle next-slice verdict says original goal is not complete but names only a slice                 | Resume Phase 1 with that slice name as the seed; scout only what is needed to fill done-when, out-of-scope, validation, and external-surface status; skip final rollup. |
 | Commit hash exists but no next-slice verdict                                                                               | Resume Phase 9 and ask Oracle next-slice gate.                                                                                                                          |
@@ -305,7 +305,7 @@ Create before Deep Plan. For slice 2+, include prior slice carry-forward so the 
   "args": {
     "action": "create",
     "path": "prompt-exports/autonomous-slice-<slug>-runs.md",
-    "content": "# Autonomous Slice: <slice name>\n\n## Slice contract\n- **Original goal:** <raw request>\n- **Current slice:** <slice name>\n- **Done when:** <criteria>\n- **Out of scope:** <exclusions>\n- **Validation:** <commands>\n- **Chosen because:** <smallest dependency-free / Oracle next-slice verdict / prior art rationale>\n- **Loop status:** active — do not final-rollup unless Oracle says original goal complete or no safe unblocked slice remains\n\n## State snapshots\n| Time | Phase | Status | Oracle next verdict | Evidence/ref |\n|------|-------|--------|---------------------|--------------|\n| <date/time> | Phase 1 | active | pending | scoreboard created |\n\n## Prior slices\n| Slice | Commit | Outcome | Oracle next verdict |\n|-------|--------|---------|---------------------|\n| <prior slice if any> | <hash> | <summary> | <next-slice verdict> |\n\n## Resume log\n| Event | Time | Source | Action |\n|-------|------|--------|--------|\n\n## Artifacts\n| Artifact | Path | Notes |\n|----------|------|-------|\n| Live plan | pending | |\n| Engineer Oracle spec | pending | |\n\n## Exa-cli lookups\n| Query | Command | Finding | Used in |\n|-------|---------|---------|---------|\n\n## Deep Plan log\n| Pass | Agent/workflow | Result | Next action |\n|------|----------------|--------|-------------|\n\n## Plan review log\n| Pass | Reviewer | Must-fix | Oracle verdict | Next action |\n|------|----------|----------|----------------|-------------|\n\n## Engineer Oracle log\n| Pass | Spec path | Verdict | Next action |\n|------|-----------|---------|-------------|\n\n## Orchestration log\n| Item | Agent/workflow | Validation | Result |\n|------|----------------|------------|--------|\n\n## Validation evidence\n| Tier | Trigger | Command/check | Result | Blocks? | Evidence |\n|------|---------|---------------|--------|---------|----------|\n\n## Specialist review log\n| Pass | Lens | Findings summary | Bucket/disposition | Oracle routing |\n|------|------|------------------|--------------------|----------------|\n\n## Implementation review log\n| Pass | Reviewer | Must-fix | Oracle verdict | Next action |\n|------|----------|----------|----------------|-------------|\n\n## Oracle verdict log\n| Phase | Pass | Question | Verdict | Action taken |\n|-------|------|----------|---------|--------------|\n\n## Commit\n| Hash | Message | Status |\n|------|---------|--------|\n"
+    "content": "# Autonomous Slice: <slice name>\n\n## Slice contract\n- **Original goal:** <raw request>\n- **Current slice:** <slice name>\n- **Done when:** <criteria>\n- **Out of scope:** <exclusions>\n- **Validation:** <commands>\n- **Chosen because:** <smallest dependency-free / Oracle next-slice verdict / prior art rationale>\n- **Loop status:** active — do not final-rollup unless Oracle says original goal complete or no safe unblocked slice remains\n\n## State snapshots\n| Time | Phase | Status | Oracle next verdict | Evidence/ref |\n|------|-------|--------|---------------------|--------------|\n| <date/time> | Phase 1 | active | pending | scoreboard created |\n\n## Prior slices\n| Slice | Commit | Outcome | Oracle next verdict |\n|-------|--------|---------|---------------------|\n| <prior slice if any> | <hash> | <summary> | <next-slice verdict> |\n\n## Resume log\n| Event | Time | Source | Action |\n|-------|------|--------|--------|\n\n## Artifacts\n| Artifact | Path | Notes |\n|----------|------|-------|\n| Live plan | pending | |\n| Engineer Oracle spec | pending | |\n\n## Exa-cli lookups\n| Query | Command | Finding | Used in |\n|-------|---------|---------|---------|\n\n## Deep Plan log\n| Pass | Agent/workflow | Result | Next action |\n|------|----------------|--------|-------------|\n\n## Plan review log\n| Pass | Reviewer | Must-fix | Oracle verdict | Next action |\n|------|----------|----------|----------------|-------------|\n\n## Engineer Oracle log\n| Pass | Spec path | Verdict | Next action |\n|------|-----------|---------|-------------|\n\n## Orchestration log\n| Item | Agent/workflow | Validation | Result |\n|------|----------------|------------|--------|\n\n## Validation evidence\n| Tier | Trigger | Command/check | Result | Blocks? | Evidence |\n|------|---------|---------------|--------|---------|----------|\n\n## Specialist review log\n| Pass | Lens | Findings summary | Bucket/disposition | Oracle routing |\n|------|------|------------------|--------------------|----------------|\n\n## Deliverable review log\n| Pass | Reviewer | Must-fix | Oracle verdict | Next action |\n|------|----------|----------|----------------|-------------|\n\n## Oracle verdict log\n| Phase | Pass | Question | Verdict | Action taken |\n|-------|------|----------|---------|--------------|\n\n## Commit\n| Hash | Message | Status |\n|------|---------|--------|\n"
   }
 }
 ```
@@ -518,13 +518,36 @@ Read the scoreboard. Confirm:
 
 If rows are missing or validation is vague, steer the same Orchestrate session to fix the record or rerun validation.
 
-## Phase 7: Implementation Review Loop
+## Phase 7: Deliverable Review Loop
 
-Review the code changes for this slice from three complementary perspectives. This is an unbounded Oracle-gated loop. The standard Review checks correctness/regression/scope/validation; `rp-ponytail-review` checks removable over-engineering; `rp-thermo-nuclear-code-quality-review` checks structural maintainability. All findings are inputs to Oracle, not independent stop/go decisions.
+Review every first-class deliverable for this slice before commit. This is an unbounded Oracle-gated loop. The standard Review checks the changed deliverables with an artifact-appropriate lens; `rp-ponytail-review` checks removable over-engineering only on implementation surfaces; `rp-thermo-nuclear-code-quality-review` checks structural maintainability only on implementation surfaces. All findings are inputs to Oracle, not independent stop/go decisions.
+
+### Review Surface Classification
+
+Classify changed files after generated-artifact exclusions and before running specialist implementation reviews. Record the classification in the scoreboard so later review/Oracle passes can see why each review lens did or did not run.
+
+Definitions:
+
+- **First-class deliverable** — a changed file or artifact intentionally included in the current slice and commit scope. Explicitly included documentation, workflow artifacts, or generated artifacts become first-class deliverables for this slice.
+- **Implementation surface** — source code; tests that encode behavior, architecture, public contracts, or regression coverage; config, scripts, migrations, build/runtime files; and active workflow definitions under `workflows/repoprompt-ce/*.md` when the change modifies operational behavior.
+- **Operational behavior** — phases, gates, Oracle usage, review loops, validation behavior, artifact policy, commit behavior, next-slice behavior, safety rules, or other instructions that change how agents execute the workflow.
+- **Docs/evidence surface** — Markdown documentation, Mermaid diagrams, README/user docs, investigations, review reports, plans, generated evidence, or other explanatory artifacts that do not change runtime behavior or operational workflow behavior.
+
+Review routing:
+
+| Surface | Examples | Required review path |
+|---------|----------|----------------------|
+| Implementation surface | Code, behavior tests, config, scripts, migrations, runtime files, operational workflow-definition changes | Standard Review + `rp-ponytail-review` + `rp-thermo-nuclear-code-quality-review` + Oracle commit-readiness classification |
+| Docs/evidence surface | README, matching Mermaid docs, user docs, investigations, generated evidence, non-operational wording changes | Docs-focused standard Review + Oracle commit-readiness classification; do not run Ponytail/Thermo by default |
+| Generated workflow artifact not explicitly included | `prompt-exports/`, `docs/plans/`, `docs/reviews/`, `docs/designs/`, `docs/analysis/`, `docs/investigation/`, `docs/investigations/` | Exclude from Phase 7 changed-file scope, reviews, Oracle changed-file selection, and commit scope; use only as context |
+| Explicitly included generated/documentation artifact | A doc/report/workflow artifact named in the slice acceptance criteria or intentionally edited by the slice | Treat as a first-class deliverable, then classify as implementation surface or docs/evidence surface |
+| Ambiguous surface | Docs that encode acceptance behavior, workflow Markdown that may change a gate, tests that may be behavior-only or typo-only | Ask Oracle to classify the surface before deciding whether specialist reviews apply |
+
+Do not skip Ponytail/Thermo because a change is small. Skip them only when no implementation surface exists, or when a required specialist review is impossible because the diff is empty, scope is unavailable, or the skill is unavailable. A docs/evidence-only slice is a **not-applicable** specialist case, not a failed specialist review.
 
 ### Generated Workflow Artifact Exclusions
 
-Workflow-generated artifacts are excluded from implementation diff, implementation Review, specialist Review, Oracle changed-file selection, and commit scopes by default.
+Workflow-generated artifacts are excluded from Phase 7 changed-file scope, first-class deliverable Review, specialist Review, Oracle changed-file selection, and commit scopes by default.
 
 This includes generated or agent-produced files under:
 
@@ -538,7 +561,7 @@ This includes generated or agent-produced files under:
 
 These files may still be used as read-only resume context, prior-art context, investigation context, validation evidence, or Oracle context.
 
-Exception: include these files explicitly when the current slice intentionally edits documentation or workflow artifacts, or when the slice acceptance criteria require those files to change. In that case, name the included paths in the scoreboard and review them as first-class deliverables.
+Exception: include these files explicitly when the current slice intentionally edits documentation or workflow artifacts, or when the slice acceptance criteria require those files to change. In that case, name the included paths in the scoreboard, review them as first-class deliverables, and apply the Review Surface Classification rules above to decide whether specialist reviews apply.
 
 ### 7a. Survey
 
@@ -555,8 +578,8 @@ Exception: include these files explicitly when the current slice intentionally e
   "args": {
     "op": "start",
     "workflow_name": "Review",
-    "session_name": "Review implementation: <slice>",
-    "message": "AUTONOMOUS IMPLEMENTATION REVIEW. Do not prompt the user or ask for comparison-scope clarification. Review the implementation for slice <slice>. Comparison scope: uncommitted changes vs HEAD, excluding generated workflow artifacts per policy unless the slice explicitly includes them. Use the plan, engineer spec, scoreboard, and changed implementation files. Focus on correctness, regressions, test coverage, scope drift, security, UX/API/system risks, and validation adequacy. Include the phrase code review in your framing.",
+    "session_name": "Review first-class deliverables: <slice>",
+    "message": "AUTONOMOUS ARTIFACT-APPROPRIATE REVIEW. Do not prompt the user or ask for comparison-scope clarification. Review all first-class deliverables for slice <slice>. Comparison scope: uncommitted changes vs HEAD, excluding generated workflow artifacts per policy unless the slice explicitly includes them. Use the plan, engineer spec, scoreboard, review surface classification, and changed first-class deliverables. For implementation surfaces, focus on correctness, regressions, test coverage, scope drift, security, UX/API/system risks, and validation adequacy. For docs/evidence surfaces, focus on factual accuracy, workflow/documentation synchronization, scope, clarity, links/rendering when applicable, leakage/secrets risk, and whether the artifact should be committed. Include the phrase code review in your framing, but do not force a code-only lens onto docs/evidence surfaces.",
     "wait": true
   }
 }
@@ -564,33 +587,35 @@ Exception: include these files explicitly when the current slice intentionally e
 
 ### 7c. Run specialist implementation reviews
 
-Run these after the standard Review, before asking Oracle whether the implementation is clean enough. These are complementary lenses, not replacements for the standard Review and not final gates.
+Run these after the standard Review, before asking Oracle whether the slice is clean enough to commit. These are complementary implementation-surface lenses, not replacements for the standard Review and not final gates.
+
+If the slice has no implementation surface after Review Surface Classification, do not run `rp-ponytail-review` or `rp-thermo-nuclear-code-quality-review`. Append a `not applicable: no implementation surface` row to `## Specialist review log`, include the reason in the Oracle commit-readiness gate, and continue with docs-focused standard Review findings plus Oracle. This is not a specialist-review failure.
 
 #### 7c-1. Ponytail over-engineering review
 
-Use the `rp-ponytail-review` skill for the current implementation diff. The scope is the current slice only: uncommitted changes vs HEAD, excluding generated workflow artifacts per policy unless this slice explicitly includes them.
+Use the `rp-ponytail-review` skill for the current implementation surfaces only. The scope is the current slice only: uncommitted implementation-surface changes vs HEAD, excluding generated workflow artifacts per policy unless this slice explicitly includes them and Review Surface Classification marks them as implementation surfaces.
 
 Required brief:
 
 ```text
-Use the rp-ponytail-review skill. Review uncommitted changes vs HEAD for slice <slice>. Exclude generated workflow artifacts per policy unless the slice explicitly includes them. Inputs: prompt-exports/autonomous-slice-<slug>-plan.md, prompt-exports/autonomous-slice-<slug>-engineer-spec.md, prompt-exports/autonomous-slice-<slug>-runs.md, and the changed implementation files. Return only deletion/simplification/stdlib/native/YAGNI findings or `Lean already. Ship.` Do not review correctness except where deletion/simplification proves the point.
+Use the rp-ponytail-review skill. Review only the implementation surfaces in the uncommitted changes vs HEAD for slice <slice>. Exclude docs/evidence surfaces and generated workflow artifacts unless the slice explicitly includes them and Review Surface Classification marks them as implementation surfaces. Inputs: prompt-exports/autonomous-slice-<slug>-plan.md, prompt-exports/autonomous-slice-<slug>-engineer-spec.md, prompt-exports/autonomous-slice-<slug>-runs.md, the review surface classification, and the changed implementation-surface files. Return only deletion/simplification/stdlib/native/YAGNI findings tied to implementation surfaces, or `Lean already. Ship.` Do not review correctness except where deletion/simplification proves the point.
 ```
 
 Append the result to `## Specialist review log` with lens `ponytail`.
 
 #### 7c-2. Thermo-nuclear maintainability review
 
-Use the `rp-thermo-nuclear-code-quality-review` skill for the current implementation diff. The scope is the current slice only: uncommitted changes vs HEAD, excluding generated workflow artifacts per policy unless this slice explicitly includes them.
+Use the `rp-thermo-nuclear-code-quality-review` skill for the current implementation surfaces only. The scope is the current slice only: uncommitted implementation-surface changes vs HEAD, excluding generated workflow artifacts per policy unless this slice explicitly includes them and Review Surface Classification marks them as implementation surfaces.
 
 Required brief:
 
 ```text
-Use the rp-thermo-nuclear-code-quality-review skill. Review uncommitted changes vs HEAD for slice <slice>. Exclude generated workflow artifacts per policy unless the slice explicitly includes them. Inputs: prompt-exports/autonomous-slice-<slug>-plan.md, prompt-exports/autonomous-slice-<slug>-engineer-spec.md, prompt-exports/autonomous-slice-<slug>-runs.md, and the changed implementation files. Focus on structural maintainability regressions, abstraction quality, module boundaries, giant files, spaghetti branching, type boundaries, canonical helper reuse, and behavior-preserving simplification. Return blocker-grade findings first, then non-blocking questions/simplification moves if any.
+Use the rp-thermo-nuclear-code-quality-review skill. Review only the implementation surfaces in the uncommitted changes vs HEAD for slice <slice>. Exclude docs/evidence surfaces and generated workflow artifacts unless the slice explicitly includes them and Review Surface Classification marks them as implementation surfaces. Inputs: prompt-exports/autonomous-slice-<slug>-plan.md, prompt-exports/autonomous-slice-<slug>-engineer-spec.md, prompt-exports/autonomous-slice-<slug>-runs.md, the review surface classification, and the changed implementation-surface files. Focus on structural maintainability regressions, abstraction quality, module boundaries, giant files, spaghetti branching, type boundaries, canonical helper reuse, and behavior-preserving simplification. Return blocker-grade findings first, then non-blocking questions/simplification moves if any.
 ```
 
 Append the result to `## Specialist review log` with lens `thermo-nuclear`.
 
-If a specialist review cannot run because the diff is empty, scope is unavailable, or the skill is unavailable, record the exact reason in the scoreboard and ask Oracle whether the missing lens blocks commit readiness.
+If a specialist review should apply to an implementation surface but cannot run because the diff is empty, scope is unavailable, or the skill is unavailable, record the exact reason in the scoreboard and ask Oracle whether the missing lens blocks commit readiness. Do not use this unavailable-review fallback for docs/evidence-only slices; those are handled by the not-applicable path above.
 
 #### 7c-3. Fix routing from specialist findings
 
@@ -598,12 +623,12 @@ Before asking Oracle, normalize specialist findings into one of these buckets in
 
 | Bucket | Meaning | Action before Oracle | Action after Oracle |
 |--------|---------|----------------------|---------------------|
-| `BLOCKER_CANDIDATE` | The specialist claims the slice is structurally unsafe, over-engineered in a behavior-relevant way, or creates maintainability debt that should not ship. | Summarize with file/line/evidence and route to Oracle. Do not fix yet unless the issue is trivial and obviously within the approved plan/spec. | If Oracle confirms blocking, fix the single highest-priority blocker, rerun validation, rerun the affected specialist lens, then ask Oracle again. |
+| `BLOCKER_CANDIDATE` | The specialist claims the slice is structurally unsafe, over-engineered in a behavior-relevant way, or creates maintainability debt that should not ship. | Summarize with file/line/evidence and route to Oracle. Do not fix yet unless the issue is trivial and obviously within the approved plan/spec. | If Oracle confirms blocking, fix the single highest-priority blocker, rerun validation, rerun the applicable specialist lens, then ask Oracle again. |
 | `SIMPLIFICATION_CANDIDATE` | The specialist found a smaller or more native implementation that appears behavior-preserving. | Summarize the simpler replacement and route to Oracle. | Fix only if Oracle marks it blocking or required for clean-enough commit; otherwise record as non-blocking follow-up. |
 | `QUESTION` | The specialist needs missing evidence about callers, boundaries, tests, or ownership. | Run a targeted explore/read if cheap; otherwise route the question to Oracle as uncertainty. | If Oracle says cannot tell, gather the missing evidence and rerun the relevant review. |
 | `NON_BLOCKING_P2_P3` | Useful improvement, cleanup, or follow-up that does not affect this slice's safety. | Record it; do not spend implementation budget before Oracle. | Carry forward only if Oracle explicitly agrees it is non-blocking. |
 
-Hard rule: after specialist reviews, the next fix is not chosen by the agent. The next fix is the single highest-priority item Oracle classifies as `BLOCKING`. If Oracle classifies all remaining specialist findings as `NON_BLOCKING_P2_P3` or `IRRELEVANT_TO_THIS_SLICE`, proceed only through the normal implementation cleanliness gate and Phase 8 path, and only if no standard Review, validation, security, correctness, contract, or Oracle-blocking findings remain.
+Hard rule: after specialist reviews, the next fix is not chosen by the agent. The next fix is the single highest-priority item Oracle classifies as `BLOCKING`. If Oracle classifies all remaining specialist findings as `NON_BLOCKING_P2_P3` or `IRRELEVANT_TO_THIS_SLICE`, proceed only through the normal commit-readiness gate and Phase 8 path, and only if no standard Review, validation, security, correctness, contract, or Oracle-blocking findings remain.
 
 #### 7c-4. Non-blocking findings decision rule
 
@@ -660,20 +685,20 @@ After Oracle returns the table, append it to the scoreboard. Fix only `Mandatory
 
 Run up to two independent gates:
 
-1. Oracle implementation cleanliness gate, using the standard Review plus both specialist review summaries.
-2. Designer/code critique when design-sensitive, UX/API-sensitive, or system-sensitive.
+1. Oracle commit-readiness gate, using the standard Review for all first-class deliverables plus specialist review summaries for implementation surfaces, or explicit specialist skip/unavailable reasons when the specialist lenses did not run.
+2. Designer/code critique when an implementation surface is design-sensitive, UX/API-sensitive, or system-sensitive. For docs/evidence-only slices, run an artifact-appropriate design/documentation critique only when the docs change affects workflow comprehension, user-facing UX copy, or operational policy clarity.
 
 ```json
-{"tool":"manage_selection","args":{"op":"set","paths":["<changed implementation files>","prompt-exports/autonomous-slice-<slug>-plan.md","prompt-exports/autonomous-slice-<slug>-engineer-spec.md","prompt-exports/autonomous-slice-<slug>-runs.md"],"mode":"full"}}
-{"tool":"ask_oracle","args":{"message":"Implementation cleanliness gate pass <N> for <slice>. Standard Review findings: <summary>. Ponytail over-engineering findings: <summary or Lean already>. Thermo-nuclear maintainability findings: <summary or No maintainability blockers found>. Validation evidence is in the scoreboard. Is this implementation clean enough to commit? Classify each remaining finding as BLOCKING, NON_BLOCKING_P2_P3, or IRRELEVANT_TO_THIS_SLICE. If not clean enough, name the single highest-priority blocking fix.","mode":"plan"}}
-{"tool":"agent_run","args":{"op":"start","model_id":"design","session_name":"Implementation critique pass <N>: <slice>","message":"Read changed implementation files, plan, spec, scoreboard, and specialist review summaries. Critique only blockers or important design/API/UX/system risks. Return concise findings. No broad re-planning.","detach":true}}
+{"tool":"manage_selection","args":{"op":"set","paths":["<changed first-class deliverables>","prompt-exports/autonomous-slice-<slug>-plan.md","prompt-exports/autonomous-slice-<slug>-engineer-spec.md","prompt-exports/autonomous-slice-<slug>-runs.md"],"mode":"full"}}
+{"tool":"ask_oracle","args":{"message":"Commit-readiness gate pass <N> for <slice>. Review surface classification: <implementation surfaces, docs/evidence surfaces, generated exclusions, edge cases>. Standard Review findings for all first-class deliverables: <summary>. Ponytail findings: <summary, Lean already, not applicable reason, or unavailable reason>. Thermo-nuclear findings: <summary, No maintainability blockers found, not applicable reason, or unavailable reason>. Validation evidence is in the scoreboard. Is this slice clean enough to commit? Classify each remaining finding as BLOCKING, NON_BLOCKING_P2_P3, or IRRELEVANT_TO_THIS_SLICE. If not clean enough, name the single highest-priority blocking fix.","mode":"plan"}}
+{"tool":"agent_run","args":{"op":"start","model_id":"design","session_name":"Artifact critique pass <N>: <slice>","message":"Read changed first-class deliverables, plan, spec, scoreboard, review surface classification, and specialist review summaries when applicable. For implementation surfaces, critique only blockers or important design/API/UX/system risks. For docs/evidence surfaces, critique only blockers to workflow comprehension, user-facing UX copy, operational policy clarity, or factual consistency. Return concise findings. No broad re-planning.","detach":true}}
 ```
 
 ### 7e. Fix loop
 
 - If Oracle says **clean enough**, proceed to Phase 8.
-- If Oracle says **not yet**, dispatch pair/engineer to fix only the named blocking finding, rerun relevant validation, append scoreboard, rerun the standard Review plus the specialist lens affected by the fix (or both specialist lenses if the fix changes structure broadly), and ask Oracle again.
-- If Oracle says **cannot tell**, widen selection or dispatch targeted explore for the unclear surface, append findings, rerun the relevant standard/specialist review, and ask Oracle again.
+- If Oracle says **not yet**, dispatch pair/engineer to fix only the named blocking finding, rerun relevant validation, append scoreboard, rerun the standard Review, rerun specialist lenses only when the fix changes implementation surfaces, and ask Oracle again.
+- If Oracle says **cannot tell**, widen selection or dispatch targeted explore for the unclear surface, append findings, rerun the relevant standard Review and any applicable specialist review, and ask Oracle again.
 - If designer or a specialist review finds a blocker candidate and Oracle says clean, ask Oracle whether that blocker candidate changes the gate. Obey Oracle.
 - If Oracle classifies remaining findings as `NON_BLOCKING_P2_P3`, record them as known follow-ups and proceed to Phase 8. Do not fix them inside this slice unless Oracle says they block commit readiness.
 - If several P2/P3 or ambiguous findings remain, run the Dynamic Oracle disposition gate once and follow its table instead of opening separate Oracle threads for each item.
@@ -694,7 +719,7 @@ Artifact policy:
 
 - `prompt-exports/autonomous-slice-<slug>-runs.md`, the normalized plan, the engineer spec, and generated or agent-produced files under `docs/plans/`, `docs/reviews/`, `docs/designs/`, `docs/analysis/`, `docs/investigation/`, and `docs/investigations/` are generated workflow artifacts by default.
 - Keep generated workflow artifacts uncommitted unless the slice explicitly edits documentation or workflow artifacts, acceptance criteria require them, or repo policy says to preserve them.
-- Exclude generated workflow artifacts from implementation Review, specialist reviews, Oracle changed-file selection, and commit scopes by default so scoreboard appends and agent reports do not pollute the next slice diff.
+- Exclude generated workflow artifacts from Phase 7 first-class deliverable Review, specialist reviews, Oracle changed-file selection, and commit scopes by default so scoreboard appends and agent reports do not pollute the next slice diff.
 - If generated workflow artifacts are intentionally committed, include them in the same slice commit, name the included paths, and make that choice explicit in the scoreboard.
 
 Rules:
@@ -705,7 +730,7 @@ Rules:
 - Message describes why the slice changed, not a file list.
 - If hooks fail, fix and create a successful commit attempt.
 - Do not amend unless repo policy explicitly requires it.
-- Append commit hash and message to the scoreboard after commit; if artifacts are uncommitted, do not include that post-commit append in the next implementation review scope.
+- Append commit hash and message to the scoreboard after commit; if artifacts are uncommitted, do not include that post-commit append in the next Phase 7 review scope.
 
 ```bash
 git add <slice-intended paths>
@@ -754,7 +779,7 @@ Oracle next slice: Original goal is not complete. Next dependency-correct slice:
 Required action:
 
 ```text
-Do not stop. Because this verdict names only the slice, resume Phase 1 with Headless Monitor Client + Shared Indicator Model as the seed, scout the missing done-when/out-of-scope/validation/external-surface fields, create its scoreboard, run exa-cli checkpoint, Deep Plan, Review loop, engineer spec, Orchestrate, implementation Review loop, commit, then ask Oracle again.
+Do not stop. Because this verdict names only the slice, resume Phase 1 with Headless Monitor Client + Shared Indicator Model as the seed, scout the missing done-when/out-of-scope/validation/external-surface fields, create its scoreboard, run exa-cli checkpoint, Deep Plan, Review loop, engineer spec, Orchestrate, Phase 7 review loop, commit, then ask Oracle again.
 ```
 
 Final rollup:
@@ -769,8 +794,8 @@ Final rollup:
 
 ## Specialist Review Semantics
 
-- Run `rp-ponytail-review` and `rp-thermo-nuclear-code-quality-review` only after implementation exists and before the Oracle implementation cleanliness gate.
-- Do not run these two skills for plan-only artifacts; plan risks are handled by standard Review, Design, and Oracle.
+- Run `rp-ponytail-review` and `rp-thermo-nuclear-code-quality-review` only for implementation surfaces after implementation exists and before the Oracle commit-readiness gate.
+- Do not run these two skills for plan-only artifacts or docs/evidence-only surfaces; those risks are handled by artifact-appropriate standard Review, Design when useful, and Oracle.
 - Treat their findings as evidence. Oracle decides whether each finding is blocking, non-blocking P2/P3, or irrelevant to the current slice.
 - A clean commit does **not** require zero suggestions. It requires zero Oracle-blocking findings.
 - P2/P3 suggestions are allowed to remain only when Oracle explicitly marks them non-blocking for this slice and they are recorded in the scoreboard/final rollup.
@@ -813,7 +838,7 @@ max active = 2
 
 Core calls:
 agent_run op=start workflow_name="Deep Plan"   # plan artifact
-agent_run op=start workflow_name="Review"      # plan/implementation review
+agent_run op=start workflow_name="Review"      # plan/deliverable review
 use skill rp-ponytail-review                  # implementation over-engineering lens
 use skill rp-thermo-nuclear-code-quality-review # implementation maintainability lens
 ask_oracle mode=plan export_response=true       # gates + engineer spec
