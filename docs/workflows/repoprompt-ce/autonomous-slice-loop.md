@@ -66,6 +66,11 @@ flowchart TD
   L --> L1["Survey git status and diff"]
   L1 --> L2["Run standard implementation Review"]
   L2 --> L3["Oracle implementation cleanliness gate"]
+  L2 --> L8["Conditional designer/code critique"]
+  L8 --> L9{"Designer blocker?"}
+  L9 -->|No| L3
+  L9 -->|Yes| L10["Ask Oracle whether blocker changes gate"]
+  L10 --> L4
   L3 --> L4{"Clean enough?"}
   L4 -->|No, blocker| L5["Fix single highest-priority blocker"]
   L5 --> L6["Rerun validation and Review"]
@@ -100,7 +105,7 @@ flowchart TD
   E --> F["Ask Oracle again"]
   F --> B
 
-  B -->|No blockers| G["Commit current slice"]
+  B -->|No Oracle-blocking findings| G["Commit current slice"]
   G --> H["Ask Oracle for next slice or completion"]
   H --> I{"Stop verdict?"}
   I -->|COMPLETE| J["Final rollup"]
