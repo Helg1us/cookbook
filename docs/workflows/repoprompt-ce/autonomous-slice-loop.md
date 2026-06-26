@@ -109,3 +109,38 @@ flowchart TD
 ```
 
 The workflow has no hidden iteration caps for blocking issues. A committed slice is not a stop condition when Oracle says the original goal is not complete.
+
+## Oracle Parallelism
+
+Oracle calls are encouraged, but the workflow keeps them scheduled. At most two independent Oracle conversations or Oracle-export-producing calls should be active at once. Dependent gates stay serial: do not ask for an implementation spec before plan approval, do not ask for commit readiness before implementation review is clean, and do not choose the next slice before the current slice is committed.
+
+```mermaid
+flowchart TD
+  A["Oracle work queue"] --> B{"Independent requests?"}
+  B -->|Yes, max 2 active| C["Run safe parallel pair"]
+  B -->|No, dependent gate| D["Run serially"]
+
+  C --> E["Summarize each answer into scoreboard"]
+  D --> E
+  E --> F["Route verdict into next workflow action"]
+
+  F --> G{"Gate dependency"}
+  G -->|Plan approved| H["Engineer spec may start"]
+  G -->|Implementation review clean| I["Commit readiness may start"]
+  G -->|Commit complete| J["Next-slice gate may start"]
+```
+
+## Generated Artifact Policy
+
+The baseline workflow treats `prompt-exports/` orchestration artifacts as workflow state, not implementation code. Scoreboards, normalized plans, and engineer specs may be used as context for resume, planning, validation evidence, and Oracle gates, but they should not pollute implementation review or commit scope unless the current slice explicitly edits workflow artifacts.
+
+```mermaid
+flowchart TD
+  A["Changed file"] --> B{"Under prompt-exports/?"}
+  B -->|No| C["Review and commit by normal slice rules"]
+  B -->|Yes| D{"Slice explicitly edits workflow artifacts?"}
+  D -->|Yes| E["Review as first-class deliverable"]
+  D -->|No| F["Exclude from implementation Review and commit scope"]
+  F --> G["Use as read-only workflow context"]
+  E --> C
+```
