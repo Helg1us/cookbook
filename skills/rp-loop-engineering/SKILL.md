@@ -34,23 +34,48 @@ context" — `bind_context op=list` → `op=bind context_id=<активний т
 **фази 1, 5-7 не пропускати ніколи**.
 
 ## Контракт реального виклику
-У фазі 0 один раз виконати `agent_manage op=list_workflows`, побудувати capability map і
-використовувати exact names verbatim з результату без case normalization. Dispatch ladder:
-1. Зареєстрований RP workflow: `agent_run op=start workflow_name="<exact name>" model_id=<role>`.
-2. Якщо workflow відсутній — виконати host-registered skill contract за exact skill name.
-3. Якщо host skill недоступний — використати перевірений canonical `SKILL.md` path: агент
-   потрібної ролі має **прочитати повністю та виконати verbatim** з explicit scope.
-4. Якщо жодна surface недоступна — записати explicit blocker у tracking list і повідомити
-   користувача.
+У фазі 0 один раз виконати `agent_manage op=list_workflows` і
+`agent_manage op=list_agents`; зберегти exact workflow та role names verbatim без case
+normalization і без висновків із подібних назв. Required workflow identities:
+`Investigate`, `Deep Plan`, `Review`, `Orchestrate`, `Optimize`.
 
-Для цього runbook canonical review skill fallbacks:
-- `~/.agents/skills/rp-thermo-nuclear-code-quality-review/SKILL.md`
-- `~/.agents/skills/rp-ponytail-review/SKILL.md`
-Коли cookbook checkout bound, repo-relative `skills/<name>/SKILL.md` є source of truth.
+Для кожної фази:
+1. Якщо exact workflow identity зареєстрована — запускати її через
+   `agent_run op=start workflow_name="<verbatim name>" model_id=<required role>`.
+2. Якщо workflow відсутній — знайти в active host або repository inventory повний,
+   читабельний `SKILL.md` відповідної capability і перевірити його. Host-registered skill
+   name, спільне походження або подібна назва не доводять workflow/skill equivalence.
+3. Запустити свіжого RepoPrompt-агента потрібної ролі, наказати йому прочитати весь
+   перевірений файл і виконати його verbatim для explicit scope. Це alternate implementation,
+   не доведений workflow alias; conductor перевіряє очікуваний output і stop gate фази.
+4. Якщо required role, повний skill contract або launch surface недоступні — записати
+   explicit blocker і зупинитися. Не переносити змістовну роботу в host conductor і не
+   заміняти відсутній contract довільним переказом.
 
-Якщо workflow-агент має викликати інший workflow або skill у своїх RP-сабагентах,
-передати йому точний `workflow_name` або canonical `SKILL.md` path. Ніколи не підміняти й не
-переказувати workflow або skill «за змістом».
+Same-named host skill може бути лише джерелом contract після знаходження й перевірки його
+повного файла; host-side invocation за ім'ям не є fallback для змістовної роботи.
+
+Skill files шукати лише в реально доступних для active host місцях:
+- addressable cookbook checkout;
+- Codex: `$HOME/.agents/skills/<name>/SKILL.md`;
+- Claude Code: `$HOME/.claude/skills/<name>/SKILL.md`.
+Перед передачею RP-агенту шлях має бути абсолютним, читабельним і вказувати на повний файл.
+Прив'язка unrelated target repo не робить cookbook-relative `skills/<name>/SKILL.md`
+доступним.
+
+`rp-ponytail-review` і `rp-thermo-nuclear-code-quality-review` — individual skill leaves.
+Composite workflow, що містить їх, не задовольняє жодну з цих leaf capabilities.
+
+`rp-loop-engineering`, `Autonomous Slice Loop` і
+`Autonomous Slice Loop + Specialist Reviews` — взаємовиключні top-level conductors.
+Не запускати Autonomous Slice Loop workflows усередині цього runbook і не підміняти
+specialist composite-ом окремий ponytail або thermo-nuclear review.
+
+У фазі 0 capability-check обов'язкового built-in `/code-review` gate. Цей runbook визнає
+його Claude Code-only capability. Якщо active host його не надає, продовжувати можна лише
+коли заздалегідь узгоджено explicit supported-host handoff із поверненням результату цьому
+conductor; інакше записати explicit blocker і зупинитися. Ніколи не пропускати gate мовчки
+й не вигадувати еквівалент.
 
 ## Правила циклів (loop-engineering)
 - **rp-review циклиться** окремо на плані (фаза 4) і на коді (фаза 6): збери P0-P1 → виправ →
@@ -98,8 +123,9 @@ go test -race .                                 # де застосовно
 - `design` — bounded critique плану (критик, не співавтор).
 - `workflow_name="Orchestrate"` — імплементація по кроках та делегування `engineer`-агентам.
 - **nuclear** (структура/maintainability) і **ponytail** (видалення/over-engineering) —
-  скіли з `~/.agents/skills/`; запускати як `pair`-агентів з відповідною лінзою,
-  ПАРАЛЕЛЬНО, на діффі. Якщо агент misfire (0 tool-uses, миттєвий вихід) — перезапусти.
+  individual skill leaves; запускати як `pair`-агентів з відповідною лінзою, ПАРАЛЕЛЬНО,
+  на діффі через перевірений absolute `SKILL.md` path. Якщо агент misfire (0 tool-uses,
+  миттєвий вихід) — перезапусти.
 - Housekeeping: `agent_manage op=cleanup_sessions` після фіксації результату.
 
 ## Чому фазу 7 не можна пропускати (перевірено практикою)
