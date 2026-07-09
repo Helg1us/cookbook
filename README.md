@@ -41,9 +41,15 @@ Discovery is wired via per-skill directory symlinks — run `skills/install.sh`
 Rules learned the hard way:
 - symlink the skill DIRECTORY, never the `SKILL.md` file (Codex skips file links)
   and never the whole `skills/` parent dir (unsupported in both CLIs);
-- RepoPrompt-managed skills (`repoprompt_managed: true` frontmatter, all `rp-*`
-  except `rp-loop-engineering`) are NOT stored here — RepoPrompt regenerates its
-  copies in `~/.claude/skills/` and `~/.codex/prompts/` on every app launch.
+- RepoPrompt STOCK skills (`repoprompt_managed: true` + `repoprompt_skills_version`
+  frontmatter — rp-build/deep-plan/investigate/optimize/oracle-export/orchestrate/
+  refactor/reminder/review) are NOT stored here — RepoPrompt regenerates them from
+  its versioned bundle on app launch;
+- do NOT put `repoprompt_managed: true` on skills stored here (it hands ownership
+  to RepoPrompt); `rp-ponytail-review` and `rp-thermo-nuclear-code-quality-review`
+  carried that flag by mistake — it was stripped when they moved in;
+- if any tool ever replaces one of the symlinks with a real directory, `install.sh`
+  prints `SKIP` — reconcile manually (git history here is the source of record).
 
 ## Workflow Documentation Rule
 
