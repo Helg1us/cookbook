@@ -1,6 +1,6 @@
 # Cookbook
 
-Private source of truth for RepoPrompt CE workflows, workflow documentation, and future workflow evaluation results.
+Private source of truth for agent skills, RepoPrompt CE workflows, workflow documentation, and future workflow evaluation results.
 
 ## Purpose
 
@@ -17,11 +17,33 @@ The local RepoPrompt CE AppSupport workflow files should be symlinks to those re
 ## Layout
 
 ```text
+skills/                         Canonical user-owned agent skills (Agent Skills format).
 workflows/repoprompt-ce/        Active RepoPrompt CE workflow definitions.
 docs/workflows/repoprompt-ce/   Matching Mermaid workflow documentation.
 archive/repoprompt-ce/          Historical backups and migration snapshots.
 results/                        Future evaluation outcomes, scores, domains, and version comparisons.
 ```
+
+## Skills
+
+`skills/` is the canonical store for user-owned skills shared across agent CLIs
+(Claude Code, Codex). Each skill is a directory with a `SKILL.md` (Agent Skills
+format; cross-agent metadata may live in `agents/openai.yaml`).
+
+Discovery is wired via per-skill directory symlinks — run `skills/install.sh`
+(idempotent) on a new machine after cloning:
+
+```text
+~/.agents/skills/<name>  -> skills/<name>   # Codex reads ~/.agents/skills natively
+~/.claude/skills/<name>  -> skills/<name>   # Claude Code supports dir symlinks
+```
+
+Rules learned the hard way:
+- symlink the skill DIRECTORY, never the `SKILL.md` file (Codex skips file links)
+  and never the whole `skills/` parent dir (unsupported in both CLIs);
+- RepoPrompt-managed skills (`repoprompt_managed: true` frontmatter, all `rp-*`
+  except `rp-loop-engineering`) are NOT stored here — RepoPrompt regenerates its
+  copies in `~/.claude/skills/` and `~/.codex/prompts/` on every app launch.
 
 ## Workflow Documentation Rule
 
