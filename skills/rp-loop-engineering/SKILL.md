@@ -22,16 +22,29 @@ context" — `bind_context op=list` → `op=bind context_id=<активний т
 
 | # | Фаза | Чим запускати | Вихід | Цикл? |
 |---|------|---------------|-------|-------|
-| 1 | Дослідження | скіл **`rp-investigate`** (pair пише у `docs/investigations/`) | file:line edit-site inventory / root cause | — |
+| 1 | Дослідження | RP workflow **`Investigate`**; вузькі probes — `explore` | file:line edit-site inventory / root cause | — |
 | 2 | Дизайн (якщо є відкриті дизайн-рішення) | **`oracle_send`** (chat): запропонуй → критикуй відповідь по суті → ітеруй **до збіжності** (звич. 2-3 раунди) | погоджений дизайн | ♾ до збіжності |
-| 3 | Детальний план | скіл **`rp-deep-plan`** → `docs/plans/`; потім bounded **design-critique** (agent_run `model_id=design`, max-1-page, ТІЛЬКИ прогалини/суперечності/порядок — НЕ переписування дизайну) → зафолдити | executable по-кроковий план | — |
-| 4 | Ревʼю плану | **`rp-review`**-прохід (pair): звірити план проти critique+inventory | 0 P0-P1 у плані | ♾ доки 0 P0-P1 |
-| 5 | Імплементація | **`rp-orchestrate`** (`agent_run workflow_name="orchestrate"`) | код, коміт+DoD після КОЖНОГО кроку | — |
-| 6 | Ревʼю коду | **`rp-review`** (pair) на діффі імплементації | 0 P0-P1 у коді | ♾ доки чисто |
-| 7 | Якість + капстон | **nuclear** + **ponytail** як `pair` (паралельно) → **rp-optimize** (якщо є перф-поверхня) → built-in **`/code-review`** | фінальний gate | re-run капстону, якщо його знахідки щось змінили |
+| 3 | Детальний план | RP workflow **`Deep Plan`** → `docs/plans/`; потім bounded **design-critique** (agent_run `model_id=design`, max-1-page, ТІЛЬКИ прогалини/суперечності/порядок — НЕ переписування дизайну) → зафолдити | executable по-кроковий план | — |
+| 4 | Ревʼю плану | RP workflow **`Review`** як `pair`: звірити план проти critique+inventory | 0 P0-P1 у плані | ♾ доки 0 P0-P1 |
+| 5 | Імплементація | RP workflow **`Orchestrate`** (`agent_run workflow_name="Orchestrate"`) | код, коміт+DoD після КОЖНОГО кроку | — |
+| 6 | Ревʼю коду | RP workflow **`Review`** як `pair` на діффі імплементації | 0 P0-P1 у коді | ♾ доки чисто |
+| 7 | Якість + капстон | canonical **nuclear** + **ponytail** skills як `pair` (паралельно) → RP workflow **`Optimize`** (якщо є перф-поверхня) → built-in **`/code-review`** | фінальний gate | re-run капстону, якщо його знахідки щось змінили |
 
 Малі задачі: фази 2-4 можна стиснути (дизайн тривіальний → одразу план + critique), але
 **фази 1, 5-7 не пропускати ніколи**.
+
+## Контракт реального виклику
+- Зареєстрований RP workflow викликати через точний `agent_run workflow_name` (`Investigate`,
+  `Deep Plan`, `Review`, `Orchestrate`, `Optimize`), а не імітувати його переказом у промпті.
+- Skill-only прохід запускати агентом потрібної ролі й передавати exact canonical `SKILL.md`
+  path з інструкцією **прочитати повністю та виконати verbatim**. Переказ protocol у промпті
+  не є викликом скіла.
+- Для цього runbook canonical review skills:
+  - `/Users/agafonovoleg/go/src/github.com/ahafonof/cookbook/skills/rp-thermo-nuclear-code-quality-review/SKILL.md`
+  - `/Users/agafonovoleg/go/src/github.com/ahafonof/cookbook/skills/rp-ponytail-review/SKILL.md`
+- Якщо workflow-агент має викликати інший workflow або skill у своїх RP-сабагентах,
+  передати йому точний `workflow_name` або canonical `SKILL.md` path; не просити відтворити
+  workflow «за змістом».
 
 ## Правила циклів (loop-engineering)
 - **rp-review циклиться** окремо на плані (фаза 4) і на коді (фаза 6): збери P0-P1 → виправ →
@@ -111,6 +124,7 @@ go test -race .                                 # де застосовно
 - 🚫 Писати план без фаз 1-2 (investigate/oracle) — план буде з дірками, які критик знайде пізніше й дорожче.
 - 🚫 Виконувати роботу built-in агентами, коли домовлено про rp-ce — усе через RepoPrompt-сабагентів.
 - 🚫 Запускати nuclear, ponytail або будь-який інший review через `explore`; review-роль — `pair`.
+- 🚫 Підміняти реальний RP workflow або skill переказом його інструкцій у довільному prompt.
 - 🚫 DoD-гейт на репо-wide vet/lint із передіснуючим шумом.
 - 🚫 Довіряти звіту orchestrate без власної верифікації.
 - 🚫 Приймати першу відповідь Oracle без критики.
