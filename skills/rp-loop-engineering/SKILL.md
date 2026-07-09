@@ -40,16 +40,20 @@ normalization і без висновків із подібних назв. Requi
 `Investigate`, `Deep Plan`, `Review`, `Orchestrate`, `Optimize`.
 
 Для кожної фази:
-1. Якщо exact workflow identity зареєстрована — запускати її через
-   `agent_run op=start workflow_name="<verbatim name>" model_id=<required role>`.
+1. Launch each registered `Investigate`, `Deep Plan`, `Review`, `Orchestrate`, or `Optimize`
+   workflow as `agent_run op=start workflow_name="<verbatim name>"` without `model_id`,
+   intentionally accepting RepoPrompt's default `pair` role; reserve explicit `explore` and
+   `design` for non-workflow probes and critiques, and leave `engineer` dispatch to `Orchestrate`.
 2. Якщо workflow відсутній — знайти в active host або repository inventory повний,
    читабельний `SKILL.md` відповідної capability і перевірити його. Host-registered skill
    name, спільне походження або подібна назва не доводять workflow/skill equivalence.
-3. Запустити свіжого RepoPrompt-агента потрібної ролі, наказати йому прочитати весь
+3. For a verified-`SKILL.md` fallback, launch a fresh RepoPrompt agent as `pair` unless
+   the complete leaf contract explicitly requires another role returned by `list_agents`; if
+   that role is unavailable, record a blocker and stop. Наказати агенту прочитати весь
    перевірений файл і виконати його verbatim для explicit scope. Це alternate implementation,
    не доведений workflow alias; conductor перевіряє очікуваний output і stop gate фази.
-4. Якщо required role, повний skill contract або launch surface недоступні — записати
-   explicit blocker і зупинитися. Не переносити змістовну роботу в host conductor і не
+4. Якщо повний skill contract або launch surface недоступні — записати explicit blocker
+   і зупинитися. Не переносити змістовну роботу в host conductor і не
    заміняти відсутній contract довільним переказом.
 
 Same-named host skill може бути лише джерелом contract після знаходження й перевірки його
