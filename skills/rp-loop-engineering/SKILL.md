@@ -1,6 +1,6 @@
 ---
 name: rp-loop-engineering
-description: "Універсальний rp-ce loop-engineering флоу для нетривіальних задач: investigate → oracle-дизайн → deep-plan → review-цикл плану → orchestrate → review-цикл коду → nuclear+ponytail+optimize → /code-review капстон. Усе в RepoPrompt-сабагентах, коміт після кожної адекватної зміни, цикли до 0 P0-P1."
+description: "Універсальний rp-ce loop-engineering флоу для нетривіальних задач: investigate → oracle-дизайн → deep-plan → pair review-цикл плану → orchestrate → pair review-цикл коду → pair nuclear+ponytail → optimize → /code-review капстон. Усе в RepoPrompt-сабагентах, коміт після кожної адекватної зміни, цикли до 0 P0-P1."
 ---
 
 # rp-ce Loop-Engineering — універсальний runbook
@@ -28,7 +28,7 @@ context" — `bind_context op=list` → `op=bind context_id=<активний т
 | 4 | Ревʼю плану | **`rp-review`**-прохід (pair): звірити план проти critique+inventory | 0 P0-P1 у плані | ♾ доки 0 P0-P1 |
 | 5 | Імплементація | **`rp-orchestrate`** (`agent_run workflow_name="orchestrate"`) | код, коміт+DoD після КОЖНОГО кроку | — |
 | 6 | Ревʼю коду | **`rp-review`** (pair) на діффі імплементації | 0 P0-P1 у коді | ♾ доки чисто |
-| 7 | Якість + капстон | **nuclear** + **ponytail** (паралельно) → **rp-optimize** (якщо є перф-поверхня) → built-in **`/code-review`** | фінальний gate | re-run капстону, якщо його знахідки щось змінили |
+| 7 | Якість + капстон | **nuclear** + **ponytail** як `pair` (паралельно) → **rp-optimize** (якщо є перф-поверхня) → built-in **`/code-review`** | фінальний gate | re-run капстону, якщо його знахідки щось змінили |
 
 Малі задачі: фази 2-4 можна стиснути (дизайн тривіальний → одразу план + critique), але
 **фази 1, 5-7 не пропускати ніколи**.
@@ -70,12 +70,16 @@ go test -race .                                 # де застосовно
   текст повідомлення не міняти, якщо на нього є string-bridge (`strings.Contains`).
 
 ## Ролі агентів (agent_run model_id)
-- `explore` — вузькі read-only розвідки (1 конкретне питання); сесії прибирати одразу.
-- `pair` — головна лінія: інвестигації, rp-review проходи; може питати → відповідай.
+- `explore` — ТІЛЬКИ вузькі read-only розвідки (1 конкретне питання), не review і не
+  імплементація; сесії прибирати одразу.
+- `pair` — усі review-проходи: `rp-review`, **nuclear**, **ponytail**, адверсарна
+  перевірка знахідок; може питати → відповідай.
+- `engineer` — виконання чітко обмежених implementation-підзадач, коли їх делегує
+  orchestrate.
 - `design` — bounded critique плану (критик, не співавтор).
-- `workflow_name="orchestrate"` — імплементація по кроках.
+- `workflow_name="orchestrate"` — імплементація по кроках та делегування `engineer`-агентам.
 - **nuclear** (структура/maintainability) і **ponytail** (видалення/over-engineering) —
-  скіли з `~/.agents/skills/`; запускати як explore-агентів з відповідною лінзою,
+  скіли з `~/.agents/skills/`; запускати як `pair`-агентів з відповідною лінзою,
   ПАРАЛЕЛЬНО, на діффі. Якщо агент misfire (0 tool-uses, миттєвий вихід) — перезапусти.
 - Housekeeping: `agent_manage op=cleanup_sessions` після фіксації результату.
 
@@ -106,6 +110,7 @@ go test -race .                                 # де застосовно
 ## Анти-патерни (виключено з практики як неефективні)
 - 🚫 Писати план без фаз 1-2 (investigate/oracle) — план буде з дірками, які критик знайде пізніше й дорожче.
 - 🚫 Виконувати роботу built-in агентами, коли домовлено про rp-ce — усе через RepoPrompt-сабагентів.
+- 🚫 Запускати nuclear, ponytail або будь-який інший review через `explore`; review-роль — `pair`.
 - 🚫 DoD-гейт на репо-wide vet/lint із передіснуючим шумом.
 - 🚫 Довіряти звіту orchestrate без власної верифікації.
 - 🚫 Приймати першу відповідь Oracle без критики.
