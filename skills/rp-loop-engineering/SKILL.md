@@ -22,10 +22,10 @@ context" — `bind_context op=list` → `op=bind context_id=<активний т
 
 | # | Фаза | Чим запускати | Вихід | Цикл? |
 |---|------|---------------|-------|-------|
-| 1 | Дослідження | RP workflow **`Investigate`**; вузькі probes — `explore` | file:line edit-site inventory / root cause | — |
+| 1 | Дослідження | RP workflow **`Investigate`**; вузькі probes — `explore` | file:line edit-site inventory / root cause; Investigate звітує шлях report (default convention `docs/investigations/`), conductor записує його | — |
 | 2 | Дизайн (якщо є відкриті дизайн-рішення) | **`oracle_send`** (chat): запропонуй → критикуй відповідь по суті → ітеруй **до збіжності** (звич. 2-3 раунди) | погоджений дизайн | ♾ до збіжності |
 | 3 | Детальний план | RP workflow **`Deep Plan`** → `docs/plans/`; потім bounded **design-critique** (agent_run `model_id=design`, max-1-page, ТІЛЬКИ прогалини/суперечності/порядок — НЕ переписування дизайну) → зафолдити | executable по-кроковий план | — |
-| 4 | Ревʼю плану | RP workflow **`Review`** як `pair`: звірити план проти critique+inventory | 0 P0-P1 у плані | ♾ доки 0 P0-P1 |
+| 4 | Ревʼю плану | RP workflow **`Review`** як `pair`: звірити план проти critique+inventory; явно вказати: review only plan file as a document artifact, do not ask for git comparison scope | 0 P0-P1 у плані | ♾ доки 0 P0-P1 |
 | 5 | Імплементація | RP workflow **`Orchestrate`** (`agent_run workflow_name="Orchestrate"`) | код, коміт+DoD після КОЖНОГО кроку | — |
 | 6 | Ревʼю коду | RP workflow **`Review`** як `pair` на діффі імплементації | 0 P0-P1 у коді | ♾ доки чисто |
 | 7 | Якість + капстон | canonical **nuclear** + **ponytail** skills як `pair` (паралельно) → RP workflow **`Optimize`** (якщо є перф-поверхня) → built-in **`/code-review`** | фінальний gate | re-run капстону, якщо його знахідки щось змінили |
@@ -34,17 +34,23 @@ context" — `bind_context op=list` → `op=bind context_id=<активний т
 **фази 1, 5-7 не пропускати ніколи**.
 
 ## Контракт реального виклику
-- Зареєстрований RP workflow викликати через точний `agent_run workflow_name` (`Investigate`,
-  `Deep Plan`, `Review`, `Orchestrate`, `Optimize`), а не імітувати його переказом у промпті.
-- Skill-only прохід запускати агентом потрібної ролі й передавати exact canonical `SKILL.md`
-  path з інструкцією **прочитати повністю та виконати verbatim**. Переказ protocol у промпті
-  не є викликом скіла.
-- Для цього runbook canonical review skills:
-  - `/Users/agafonovoleg/go/src/github.com/ahafonof/cookbook/skills/rp-thermo-nuclear-code-quality-review/SKILL.md`
-  - `/Users/agafonovoleg/go/src/github.com/ahafonof/cookbook/skills/rp-ponytail-review/SKILL.md`
-- Якщо workflow-агент має викликати інший workflow або skill у своїх RP-сабагентах,
-  передати йому точний `workflow_name` або canonical `SKILL.md` path; не просити відтворити
-  workflow «за змістом».
+У фазі 0 один раз виконати `agent_manage op=list_workflows`, побудувати capability map і
+використовувати exact names verbatim з результату без case normalization. Dispatch ladder:
+1. Зареєстрований RP workflow: `agent_run op=start workflow_name="<exact name>" model_id=<role>`.
+2. Якщо workflow відсутній — виконати host-registered skill contract за exact skill name.
+3. Якщо host skill недоступний — використати перевірений canonical `SKILL.md` path: агент
+   потрібної ролі має **прочитати повністю та виконати verbatim** з explicit scope.
+4. Якщо жодна surface недоступна — записати explicit blocker у tracking list і повідомити
+   користувача.
+
+Для цього runbook canonical review skill fallbacks:
+- `~/.agents/skills/rp-thermo-nuclear-code-quality-review/SKILL.md`
+- `~/.agents/skills/rp-ponytail-review/SKILL.md`
+Коли cookbook checkout bound, repo-relative `skills/<name>/SKILL.md` є source of truth.
+
+Якщо workflow-агент має викликати інший workflow або skill у своїх RP-сабагентах,
+передати йому точний `workflow_name` або canonical `SKILL.md` path. Ніколи не підміняти й не
+переказувати workflow або skill «за змістом».
 
 ## Правила циклів (loop-engineering)
 - **rp-review циклиться** окремо на плані (фаза 4) і на коді (фаза 6): збери P0-P1 → виправ →
@@ -90,7 +96,7 @@ go test -race .                                 # де застосовно
 - `engineer` — виконання чітко обмежених implementation-підзадач, коли їх делегує
   orchestrate.
 - `design` — bounded critique плану (критик, не співавтор).
-- `workflow_name="orchestrate"` — імплементація по кроках та делегування `engineer`-агентам.
+- `workflow_name="Orchestrate"` — імплементація по кроках та делегування `engineer`-агентам.
 - **nuclear** (структура/maintainability) і **ponytail** (видалення/over-engineering) —
   скіли з `~/.agents/skills/`; запускати як `pair`-агентів з відповідною лінзою,
   ПАРАЛЕЛЬНО, на діффі. Якщо агент misfire (0 tool-uses, миттєвий вихід) — перезапусти.
@@ -128,7 +134,7 @@ go test -race .                                 # де застосовно
 - 🚫 DoD-гейт на репо-wide vet/lint із передіснуючим шумом.
 - 🚫 Довіряти звіту orchestrate без власної верифікації.
 - 🚫 Приймати першу відповідь Oracle без критики.
-- 🚫 Пропускати nuclear/ponytail «бо rp-review уже чистий».
+- 🚫 Пропускати required review-lens без доказу, що та сама lens уже виконана на тому самому effective diff; будь-яка зміна review surface інвалідує цей доказ.
 - 🚫 Спекулятивна загальність (політики/абстракції «на майбутнє», не підключені зараз) — MVP; додаси, коли підключиш.
 - 🚫 Фіксити знахідки, що міняють поведінку/скоуп, без рішення користувача.
 - 🚫 Лишати процес-артефакти (repro, investigation-доки) у shipping-гілці без явного рішення — зберігай на scratch-гілці (`git branch <name>-artifacts HEAD`).
