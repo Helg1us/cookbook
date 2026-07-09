@@ -28,7 +28,7 @@ context" — `bind_context op=list` → `op=bind context_id=<активний т
 | 4 | Ревʼю плану | RP workflow **`Review`** як `pair`: звірити план проти critique+inventory; явно вказати: review only plan file as a document artifact, do not ask for git comparison scope | 0 P0-P1 у плані | ♾ доки 0 P0-P1 |
 | 5 | Імплементація | RP workflow **`Orchestrate`** (`agent_run workflow_name="Orchestrate"`) | код, коміт+DoD після КОЖНОГО кроку | — |
 | 6 | Ревʼю коду | RP workflow **`Review`** як `pair` на діффі імплементації | 0 P0-P1 у коді | ♾ доки чисто |
-| 7 | Якість + капстон | canonical **nuclear** + **ponytail** skills як `pair` (паралельно) → RP workflow **`Optimize`** (якщо є перф-поверхня) → built-in **`/code-review`** | фінальний gate | re-run капстону, якщо його знахідки щось змінили |
+| 7 | Якість + капстон | canonical **nuclear** + **ponytail** skills як `pair` (паралельно) → RP workflow **`Optimize`** (запускати завжди: виконати Phase-1 scouting; повний performance loop продовжувати лише за наявності вимірюваної метрики або hot path, інакше зафіксувати explicit N/A verdict) → built-in **`/code-review`** | фінальний gate | re-run капстону, якщо його знахідки щось змінили |
 
 Малі задачі: фази 2-4 можна стиснути (дизайн тривіальний → одразу план + critique), але
 **фази 1, 5-7 не пропускати ніколи**.
