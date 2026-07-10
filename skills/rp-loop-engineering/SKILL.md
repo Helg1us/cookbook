@@ -18,20 +18,42 @@ RepoPrompt-сабагентах**, не в головній сесії. Голо
 context" — `bind_context op=list` → `op=bind context_id=<активний таб>`. Якщо пізніше
 "cannot inherit the explicit-tab worktree" — перебиндись на window-only і повтори.
 
+Initialize exactly one task-scoped ledger at
+`.tmp/rp-loop-engineering/<task-slug>/gate-ledger.md`. Its disposition and contents are
+governed only by the canonical ledger rule in the freeze section below.
+
 ## Пайплайн (7 фаз)
 
 | # | Фаза | Чим запускати | Вихід | Цикл? |
 |---|------|---------------|-------|-------|
 | 1 | Дослідження | RP workflow **`Investigate`**; вузькі probes — `explore` | file:line edit-site inventory / root cause; Investigate звітує шлях report (default convention `docs/investigations/`), conductor записує його | — |
-| 2 | Дизайн (якщо є відкриті дизайн-рішення) | **`oracle_send`** (chat): запропонуй → критикуй відповідь по суті → ітеруй **до збіжності** (звич. 2-3 раунди) | погоджений дизайн | Oracle design iterates до збіжності; unresolved behavior/scope decision → escalation до користувача; без рішення фаза завершується як explicit blocker |
+| 2 | Дизайн (якщо є відкриті дизайн-рішення) | **`oracle_send`** (chat), за bounded Oracle contract нижче | converged design або escalation/blocker | за bounded Oracle contract нижче |
 | 3 | Детальний план | RP workflow **`Deep Plan`** → `docs/plans/`; потім bounded **design-critique** (agent_run `model_id=design`, max-1-page, ТІЛЬКИ прогалини/суперечності/порядок — НЕ переписування дизайну) → зафолдити | executable по-кроковий план | — |
 | 4 | Ревʼю плану | RP workflow **`Review`** як `pair`: звірити план проти critique+inventory; явно вказати: review only plan file as a document artifact, do not ask for git comparison scope | 0 P0-P1 у плані | до 3 qualifying plan-remediation cycles; далі Investigate + Oracle |
 | 5 | Імплементація | RP workflow **`Orchestrate`** (`agent_run workflow_name="Orchestrate"`) | код, коміт+DoD після КОЖНОГО кроку | — |
 | 6 | Ревʼю коду | RP workflow **`Review`** як `pair` на діффі імплементації | 0 P0-P1 на immutable candidate identity | до 3 qualifying code-remediation cycles; далі Investigate + Oracle |
 | 7 | Якість + капстон | після promotion: canonical **nuclear** + **ponytail** skills як `pair` (паралельно) → RP workflow **`Optimize`** (запускати завжди: виконати Phase-1 scouting; повний performance loop продовжувати лише за наявності вимірюваної метрики або hot path, інакше зафіксувати explicit N/A verdict) → built-in **`/code-review`** | фінальний gate на promoted frozen identity | будь-яка gate-driven мутація → DoD, новий candidate, повна фаза 6, promotion і всі gates фази 7 |
 
-Малі задачі: фази 2-4 можна стиснути (дизайн тривіальний → одразу план + critique), але
-**фази 1, 5-7 не пропускати ніколи**.
+Після Investigation прийняти бінарне рішення про small-task compression і записати
+eligibility та reason у ledger; невизначеність завжди обирає повний шлях. Фази 2-4 можна
+обʼєднати в один стислий plan/critique/review pass лише коли немає open design decision,
+external/public contract, concurrency, security, persistence, migration risk або
+cross-module ownership change. Compression зменшує лише ceremony й нічого не auto-pass:
+будь-який P0/P1 входить у повний звичайний remediation loop. **Фази 1 і 5-7 залишаються
+обовʼязковими**. Не вводити Small/Standard/Critical lanes. Для trivial tasks використовувати
+інший lightweight workflow, а не послаблювати цей conductor.
+
+## Bounded Oracle contract
+Oracle convergence у фазі 2 та в remediation escalation: після initial
+answer провести щонайменше один і максимум три **substantive critique-response rounds**.
+Раунд рахується лише коли critique містить новий argument/evidence, а Oracle відповідає по
+суті; clarification або acknowledgement не рахуються substantive rounds, але кожен споживає
+окремий guard максимум двох consecutive non-substantive exchanges; його exhaustion завершує
+contract за тим самим terminal правилом нижче. Unresolved behavior/scope негайно
+ескалювати, не вичерпуючи round budget. Якщо після третього substantive round лишається
+material disagreement, звертатися до користувача лише коли його рішення здатне розвʼязати
+питання; інакше завершити як explicit blocker. Намір користувача не може waive
+`CONFIRMED` P0/P1.
 
 ## Контракт реального виклику
 У фазі 0 один раз виконати `agent_manage op=list_workflows` і
@@ -55,6 +77,13 @@ normalization і без висновків із подібних назв. Requi
 4. Якщо повний skill contract або launch surface недоступні — записати explicit blocker
    і зупинитися. Не переносити змістовну роботу в host conductor і не
    заміняти відсутній contract довільним переказом.
+
+Для кожного leaf launch misfire означає zero tool uses або immediate exit. Після першого
+misfire виконати **рівно один** fresh relaunch і передати повний verified leaf contract
+verbatim разом з тим самим scope та всіма binding/Git/`context_builder` requirements.
+Другий misfire блокує leaf і всю його фазу. Цей budget окремий від stall retries та діє
+per leaf per gate run; нова promoted freeze identity починає новий gate run і новий
+misfire budget.
 
 Same-named host skill може бути лише джерелом contract після знаходження й перевірки його
 повного файла; host-side invocation за ім'ям не є fallback для змістовної роботи.
@@ -153,6 +182,29 @@ Record enough path/type/content metadata to detect create/delete/modify:
 - inspect ignored paths when covered or potentially relevant as generated input, cache/config,
   or discovery target; use the same predicate for exclusion and otherwise include their state.
 
+### Canonical ledger rule
+The exact mutable ledger path is
+`.tmp/rp-loop-engineering/<task-slug>/gate-ledger.md`. Keep it uncommitted by default and
+non-authoritative; Git state and original agent outputs remain authoritative. After resolving
+the canonical freeze universe, scopes, and generic EXCLUDED predicate above, this
+ledger-specific exception has exactly two viable modes:
+- **PROVEN EXCLUDED** — the exact ledger path satisfies the full canonical generic EXCLUDED
+  predicate above. Ledger updates remain outside the candidate/frozen surface.
+- **CLEAN GATE WORKTREE** — all actors in the canonical universe operate against the same
+  recorded isolated clean materialized worktree/frozen identity; the ledger is absent there
+  and no actor reads it from the external orchestration worktree. Ledger updates remain outside
+  that gate worktree/surface.
+If neither mode is proved, stop with an explicit blocker before candidate capture. The ledger
+never receives an `included` or standalone `cleaned` disposition; the general
+include/clean/clean-materialized-worktree fallback remains available only for other inputs.
+
+Record artifact identities, tracked/index/submodule evidence, untracked dispositions, phase
+states, remediation counters, adjudicated findings, blockers, required gate outcomes, and
+deferred decisions with rationale/revisit triggers. Never store secrets, full transcripts,
+prompt dumps, token accounting, or optional telemetry/session IDs unless a gate explicitly
+consumes the field. The ledger supplements `TaskCreate`/`TaskUpdate`; it never replaces the
+task tracker.
+
 The actual invocation/read log is post-factum evidence only, not new candidate identity
 membership. Every Phase-6 `Review` and nested `context_builder` invocation must stay within
 the closed manifest. Out-of-manifest access aborts Phase 6, forbids promotion, and requires a
@@ -185,10 +237,23 @@ promote exact same identity після доказу незмінності та 
 але ніколи не замінює жоден required gate.
 
 ## DoD кожного кроку імплементації (не торгується)
+До імплементації визначити exact commands і записати їх у ledger. Пріоритет джерел:
+`AGENTS` → repository CI → documented Make/package scripts → ecosystem-standard defaults.
+CI configs без explicit required markers означають усі default jobs, релевантні зміненим
+components і shared/public surface.
+
+Нередукований floor:
+- build та/або typecheck, де застосовно;
+- scoped static analysis;
+- relevant deterministic tests;
+- final gate, що покриває affected components і shared/public surface.
+
+Відсутня або недоступна категорія потребує explicit evidence-backed N/A; мовчазне
+вилучення заборонене. Go-приклад, не універсальний contract:
 ```
-go build ./...                                  # (або еквівалент стеку)
-go vet <ТІЛЬКИ змінені пакети>                  # scoped! див. нижче
-go test <змінені області> ./... (relevant)
+go build ./...                                  # build
+go vet <ТІЛЬКИ змінені пакети>                  # scoped static analysis
+go test <змінені області> ./... (relevant)       # relevant deterministic tests/final gate
 go test -race .                                 # де застосовно
 ```
 - ⚠ **vet/lint скоупити на змінені пакети.** Передіснуючий шум репозиторію (напр. protobuf
@@ -230,9 +295,9 @@ go test -race .                                 # де застосовно
 - `workflow_name="Orchestrate"` — імплементація по кроках та делегування `engineer`-агентам.
 - **nuclear** (структура/maintainability) і **ponytail** (видалення/over-engineering) —
   individual skill leaves; запускати як `pair`-агентів з відповідною лінзою, ПАРАЛЕЛЬНО,
-  на діффі через перевірений absolute `SKILL.md` path. Якщо агент misfire (0 tool-uses,
-  миттєвий вихід) — перезапусти. Це окремий launch failure, не stall evidence і не витрачає
-  єдиний retry для позитивно доведеного stall.
+  на діффі через перевірений absolute `SKILL.md` path. Для їх misfire застосовувати загальний
+  one-relaunch-per-leaf-per-gate-run contract вище; це launch failure, окремий від stall
+  evidence та stall-retry budget.
 - Housekeeping: `agent_manage op=cleanup_sessions` після фіксації результату.
 
 ## Чому фазу 7 не можна пропускати (перевірено практикою)
@@ -288,4 +353,4 @@ go test -race .                                 # де застосовно
 використані як proof; статус кожного gate фаз 6-7 саме на promoted frozen identity;
 що знайшов кожен шар ревʼю; divergence/escalation та stall/retry/blocker outcomes, якщо були;
 verification і фінальний clean/dirty status; known-latent/deferred список (щоб наступні ревʼю
-не ре-флагали); відкриті питання користувачу.
+не ре-флагали); відкриті питання користувачу; посилання на summary у canonical ledger.
