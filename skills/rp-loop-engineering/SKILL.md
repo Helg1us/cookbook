@@ -180,8 +180,7 @@ Include the complete immutable known-context record set consumed by Phase-7 gate
 canonical digest before capture; derive the digest under the verified capstone contract without
 silently widening or recapturing this frozen input later. Before candidate capture, include the
 complete Phase-0 `capstone_contract_record` in this closed manifest; its canonical manifest
-digest is therefore bound into candidate and promoted identity. Keep the record authoritative
-in-session; the ledger remains only its audit mirror.
+digest is therefore bound into candidate and promoted identity.
 Before candidate capture, detect every base-to-head changed gitlink. For each, require the
 immutable already-reviewed exact transition contract defined by the verified `rp-capstone-review`
 skill and bind its record and digest into the closed manifest; otherwise block before Phase 6.
