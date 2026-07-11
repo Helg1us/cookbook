@@ -5,9 +5,9 @@
 
 ## Authority та межа conductor/children
 
-Parent conductor є єдиним control plane; authoritative ownership summary наведено в таблиці **Roles та actual child ownership** нижче. Він перевіряє outputs і докази, але не дублює змістовну роботу leaves.
+Parent conductor є єдиним control plane; authoritative ownership summary наведено в таблиці **Roles та actual child ownership** нижче. Він перевіряє outputs і докази, але не дублює змістовну роботу leaves. У Phase 0 він знаходить і повністю читає `rp-capstone-review/SKILL.md` з addressable cookbook checkout, `~/.agents/skills/` або `~/.claude/skills/` symlink view за canonical verified-skill rules; відсутність або unreadability блокує run.
 
-Child володіє тільки явно переданим scope та результатом свого leaf contract. Рекурсивного spawning немає: лише owner, указаний у таблиці, може створити свого прямого child; цей child не створює наступний рівень.
+Child володіє тільки явно переданим scope та результатом свого leaf contract. Звичайні leaves не spawn-ять наступний рівень. Виняток — host-level `rp-capstone-review`: parent викликає його integrated entry point, а verified capstone contract сам володіє lifecycle своїх fresh `pair` children; parent не керує ними externally.
 
 ## Overview
 
@@ -40,7 +40,7 @@ flowchart TB
     N["7a · Nuclear"]
     T["7b · Ponytail"]
     OP["7c · Optimize"]
-    CR["7d · built-in code-review"]
+    CR["7d · rp-capstone-review"]
     Z["Terminal report"]
   end
   P --> B --> L --> I --> C
@@ -90,7 +90,7 @@ Small-task compression вирішується після Phase 1 і стиска
 - **6 · Review:** immutable/read-only gate; freeze semantics наведені в секції Evidence нижче.
 - **7:** nuclear і ponytail запускаються паралельно як окремі `pair` leaves на promoted identity; child/context ownership визначає таблиця нижче.
 - `Optimize` завжди виконує Phase-1 scouting; далі serial loop з cap **5** лише за measurable metric/hot path, інакше explicit evidence-backed N/A.
-- Фінал — built-in `/code-review` gate. Він відрізняється від однойменного marketplace plugin; plugin не задовольняє цей gate.
+- Фінал — verified host-level `rp-capstone-review` integrated entry point на тій самій promoted frozen identity. Parent передає complete promoted Phase-6 record/manifest і immutable known-context records з їхніми digests та full canonical root/base/head; capstone сам володіє lifecycle внутрішніх fresh `pair` children.
 </details>
 
 ## Roles та actual child ownership
@@ -106,8 +106,9 @@ Small-task compression вирішується після Phase 1 і стиска
 | Implementation children | `Orchestrate` → `engineer` | ≤5 parent-authored items; no grandchildren |
 | Nuclear/Ponytail review context | Individual leaves | Leaves own `context_builder`; parent pins promoted identity and maps severity |
 | Performance loop | `Optimize` | Serial, cap 5 |
+| Final capstone | Parent invokes verified `rp-capstone-review` at host level | Integrated entry point; capstone owns child lifecycle; no external leaf wrapping/retry |
 
-Required workflow identities are verbatim: `Investigate`, `Deep Plan`, `Review`, `Orchestrate`, `Optimize`. One leaf misfire (zero tool use/immediate exit) permits exactly one fresh relaunch per leaf per gate run; a second misfire blocks the phase.
+Required workflow identities are verbatim: `Investigate`, `Deep Plan`, `Review`, `Orchestrate`, `Optimize`. Для conductor-launched leaves поза capstone один misfire (zero tool use/immediate exit) permits exactly one fresh relaunch per leaf per gate run; a second misfire blocks the phase. Internal capstone attempts належать лише його verified lifecycle contract.
 
 ## Bounds, remediation та terminal branches
 
@@ -153,7 +154,7 @@ Plan і code counters незалежні: **3 qualifying cycles на epoch** і 
 
 ## Evidence, freeze та invalidation
 
-Closed manifest обмежує inputs/actors, щоб Phase 6 read-only перевірила одну immutable candidate identity; `no P0-P1` плюс unchanged proof promote-ить саме її без recapture. Релевантна mutation інвалідовує evidence й запускає canonical DoD/candidate/full-Phase-6/promotion/Phase-7 rerun; точні predicates, identity fields і restart details див. у canonical `SKILL.md`.
+Closed manifest обмежує inputs/actors, щоб Phase 6 read-only перевірила одну immutable candidate identity. До candidate capture кожна base→head changed gitlink мусить мати immutable already-reviewed exact transition contract і record/digest у manifest за verified `rp-capstone-review`; інакше Phase 6 блокується. `no P0-P1` плюс unchanged proof promote-ить саме цю identity без recapture. Релевантна mutation інвалідовує evidence й запускає canonical DoD/candidate/full-Phase-6/promotion/Phase-7 rerun; точні predicates, contract schema, identity fields і restart details див. у canonical `SKILL.md`.
 
 Ledger залишається non-authoritative й має лише режими **PROVEN EXCLUDED** або **CLEAN GATE WORKTREE**; їхні predicates і disposition rules визначає canonical `SKILL.md`.
 
@@ -168,14 +169,14 @@ Any parent-side strengthening must be explicit and reference child contracts rat
 | Implementation | Parent не імплементує leaf scope |
 | Review context | Parent не перебудовує architecture/deletion context замість owner |
 | Performance | N/A не імітує performance loop |
-| Capstone | Marketplace plugin або інша lens не є substitute built-in `/code-review` |
+| Capstone | Parent не дублює повний protocol і не керує internal leaves замість verified `rp-capstone-review` contract |
 
 ## Canonical paths
 
 - Cookbook authority: `skills/rp-loop-engineering/SKILL.md`.
-- Individual leaves: `skills/rp-thermo-nuclear-code-quality-review/SKILL.md`, `skills/rp-ponytail-review/SKILL.md`.
+- Individual review contracts: `skills/rp-thermo-nuclear-code-quality-review/SKILL.md`, `skills/rp-ponytail-review/SKILL.md`, `skills/rp-capstone-review/SKILL.md`.
 - RepoPrompt workflow sources: `workflows/repoprompt-ce/WorkflowPrompt.swift`, `Investigate.swift`, `DeepPlan.swift`, `Review.swift`, `Orchestrate.swift`, `Optimize.swift` у тому самому каталозі.
-- Host discovery wrappers: `~/.agents/skills/<name>/SKILL.md` для трьох cookbook skills вище. Це wrapper/symlink view, не окрема authority.
+- Host discovery wrappers: `~/.agents/skills/<name>/SKILL.md` і `~/.claude/skills/<name>/SKILL.md` для чотирьох cookbook skills вище. Це рівноправні wrapper/symlink views, не окрема authority.
 
 ## Deferred NON-BLOCKING decisions
 
@@ -183,7 +184,6 @@ Any parent-side strengthening must be explicit and reference child contracts rat
 |---|---|
 | Phase-4 plan review через git-diff mode | Review contract набуде документного diff scope без змішування code comparison |
 | Чи дублює bounded critic можливості Deep Plan | З'явиться evidence про еквівалентний critic output/provenance |
-| Namespace collision built-in gate і marketplace plugin | Host/plugin registry або invocation syntax зміниться |
 | Mandatory interaction у Deep Plan | Canonical workflow явно гарантуватиме/вимагатиме interaction semantics |
 | Stale `~/.codex/prompts/rp-review.md` | Будь-який active wrapper почне на нього посилатися або host inventory зміниться |
 
