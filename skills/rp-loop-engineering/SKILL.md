@@ -101,10 +101,17 @@ Composite workflow, що містить їх, не задовольняє жод
 
 У фазі 0 знайти `rp-capstone-review/SKILL.md` в addressable cookbook checkout,
 `$HOME/.agents/skills/rp-capstone-review/SKILL.md` або
-`$HOME/.claude/skills/rp-capstone-review/SKILL.md` за тими самими verified-skill rules:
-перетворити шлях на absolute, перевірити readability і прочитати **повний** файл. Відсутній,
-нечитабельний або неповний capstone contract — explicit blocker. Host-registered name,
-походження чи схожа capability не є заміною перевіреного файла.
+`$HOME/.claude/skills/rp-capstone-review/SKILL.md` за тими самими verified-skill rules і
+вибрати рівно один contract. Його absolute logical discovery path перетворити на absolute,
+фізично resolved canonical target; довести, що target — читабельний regular file; рівно один
+раз прочитати всі bytes в immutable buffer і записати їх SHA-256 та byte length. Якщо target
+перебуває в accessible Git checkout і path tracked at HEAD, додатково записати canonical repo
+root, repo-relative path, object format, tree mode/type, `HEAD:path` blob OID і доказ, що
+фактичні bytes тотожні цьому blob. Не pin-ити source-repo HEAD: unrelated commit зі сталим
+blob лишається valid. Сукупність цих полів є immutable `capstone_contract_record` і
+authoritative in-session state; ledger — лише audit mirror. Відсутній, нечитабельний або
+неповний capstone contract — explicit blocker. Host-registered name, походження чи схожа
+capability не є заміною перевіреного файла.
 
 ## Правила циклів (loop-engineering)
 - Вести два незалежні лічильники, початково `0`: `plan_remediation_count` для фази 4 та
@@ -171,7 +178,10 @@ repo/worktree/submodule/external path and the permitted traversal/discovery boun
 actors in that universe. A covered path is within those bounds or otherwise directly consumed.
 Include the complete immutable known-context record set consumed by Phase-7 gates and its
 canonical digest before capture; derive the digest under the verified capstone contract without
-silently widening or recapturing this frozen input later.
+silently widening or recapturing this frozen input later. Before candidate capture, include the
+complete Phase-0 `capstone_contract_record` in this closed manifest; its canonical manifest
+digest is therefore bound into candidate and promoted identity. Keep the record authoritative
+in-session; the ledger remains only its audit mirror.
 Before candidate capture, detect every base-to-head changed gitlink. For each, require the
 immutable already-reviewed exact transition contract defined by the verified `rp-capstone-review`
 skill and bind its record and digest into the closed manifest; otherwise block before Phase 6.
@@ -306,8 +316,15 @@ go test -race .                                 # де застосовно
   на діффі через перевірений absolute `SKILL.md` path. Для їх misfire застосовувати загальний
   one-relaunch-per-leaf-per-gate-run contract вище; це launch failure, окремий від stall
   evidence та stall-retry budget.
-- **rp-capstone-review** — host-level final gate: parent conductor сам викликає повний
-  verified contract через його integrated entry point після nuclear, ponytail та `Optimize`.
+- **rp-capstone-review** — host-level final gate. Immediately before its integrated entry
+  point, re-resolve the original logical discovery path and require the same canonical target;
+  open that target, require a regular file, read all bytes exactly once into a new immutable
+  buffer, and recheck byte length, SHA-256 та, коли pinned, tracked path/tree mode/type/blob OID
+  and byte equality to that blob. Виконати integrated contract з exact щойно перевірених bytes:
+  без третього path read, skill-name registry lookup або path-only invocation. Будь-яка
+  невідповідність — BLOCKED для поточного frozen run; replacement не можна re-pin/reverify
+  in-run, новий contract вимагає нового Phase-0 run. Parent conductor робить цю перевірку й
+  викликає повний verified contract після nuclear, ponytail та `Optimize`.
   Не запускати capstone як RepoPrompt child, не обгортати й не повторювати externally його
   internal leaves: capstone сам володіє їхнім lifecycle, а вся змістовна finding work лишається
   в його fresh `pair` children. Capstone blocker блокує release; retained P0/P1 проходять
