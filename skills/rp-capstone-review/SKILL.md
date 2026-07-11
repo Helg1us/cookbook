@@ -40,11 +40,12 @@ For every structured record digest, encode RFC 8785 canonical JSON as UTF-8 and 
 1. Run `LC_ALL=C git rev-parse --show-object-format`. Set `oid_hex_length=40` for `sha1`, `64` for `sha256`, and block every unknown format.
 2. Capture these byte streams from the pinned endpoints:
 ```text
-LC_ALL=C git -c diff.algorithm=myers -c core.quotePath=false diff --no-renames --no-ext-diff --no-textconv --full-index --abbrev=<oid_hex_length> --raw -z <base> <head> --
-LC_ALL=C git -c diff.algorithm=myers -c core.quotePath=false diff --no-renames --no-ext-diff --no-textconv --full-index --patch --binary --unified=0 <base> <head> --
+LC_ALL=C git -c diff.algorithm=myers -c core.quotePath=false diff --no-color --default-prefix --src-prefix=a/ --dst-prefix=b/ -O/dev/null --no-renames --no-ext-diff --no-textconv --full-index --abbrev=<oid_hex_length> --raw -z <base> <head> --
+LC_ALL=C git -c diff.algorithm=myers -c core.quotePath=false diff --no-color --default-prefix --src-prefix=a/ --dst-prefix=b/ -O/dev/null --no-renames --no-ext-diff --no-textconv --full-index --patch --binary --unified=0 <base> <head> --
 ```
 3. Assign Git-emitted raw records, in order, `G0001...`. Assign each textual hunk header under its record `G0001/H0001...`. Preserve mode, type, full OIDs, status, and paths for text, binary, symlink, gitlink, and mode/type-only units. With rename detection disabled, treat moves as endpoint-specific additions and deletions.
 4. Define a scope group deterministically as one `Gxxxx` raw record plus all of its `Hxxxx` units. Map every G/H unit exactly once to that group. Compute the diff digest as SHA-256 of the raw stream bytes immediately followed by the patch stream bytes, in that order, with no delimiter or transformation. Freeze it and the structural inventory of records, hunks, paths, types, and group mappings. Never let focus reduce this inventory.
+5. Record the exact acquisition argv and environment profile above in the acquisition manifest and bind it into the evidence digest. The diff digest is defined only from the raw and patch byte streams produced by those two exact recorded invocations. Every replay must use a byte-for-byte identical profile; any profile mismatch is incomparable and must fail closed as `BLOCKED / BLOCK`. The verifier must detect and block any raw or patch byte change between the frozen acquisition and replay. Block if the installed Git does not support the complete profile. This profile neutralizes ambient `diff.noprefix`, `diff.srcPrefix`, `diff.dstPrefix`, `diff.mnemonicPrefix`, forced color, and `diff.orderFile`; determinism is claimed only for repeated acquisition with the same Git executable/version, repository/object database, pinned endpoints, filesystem-visible attributes and filters, locale, residual configuration, operating system, and recorded profile. No universal determinism is claimed across even stable residual configuration, attributes or filters, Git executables or versions, operating systems, platforms, repositories, or mutable external diff/textconv behavior.
 
 Only after this complete canonical inventory, allow a standalone empty endpoint range to return `NO REVIEWABLE CHANGES / BLOCK`; require empty G/H inventory, launch no children, and emit no sentinel.
 
@@ -97,7 +98,7 @@ Require `INTRODUCED -> ABSENT`, `REGRESSED -> DIFFERENT_BEHAVIOR`, and `MATERIAL
 
 ## Verify and adjudicate
 
-After the barrier and checkpoint, launch one fresh `pair` verifier. Require it to independently rerun the canonical diff, compare both the recomputed raw-plus-patch byte digest and full G/H inventory/mapping with the frozen values, and rediscover governing instructions from the pinned commit trees. It must:
+After the barrier and checkpoint, launch one fresh `pair` verifier. Require it to independently rerun the canonical diff with the recorded byte-for-byte identical acquisition argv and environment profile, compare both the recomputed raw-plus-patch byte digest and full G/H inventory/mapping with the frozen values, and rediscover governing instructions from the pinned commit trees. It must:
 
 - block missing, extra, duplicate, unmapped, or multiply mapped units and every authority gap;
 - in integrated mode, audit exact equality and no narrowing between the complete canonical promoted record and promoted closed-input manifest and the acquisition, evidence, and access dispositions, including traversal bounds, included ignored or external inputs, and per-actor dispositions;
