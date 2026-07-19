@@ -121,6 +121,15 @@ capability не є заміною перевіреного файла.
   finding into P0/P1/P2 by impact and evidence, never by leaf section or tag. Nuclear and
   Ponytail are not expected to emit P0/P1/P2. After this mapping, the existing
   CONFIRMED/PLAUSIBLE/REFUTED adjudication applies.
+- For the single bounded finding-bearing child output currently under adjudication, no next
+  patch or Oracle/reviewer scope is authorized until every material finding has a latest
+  disposition in the append-only finding table below. This covers Review, critique, Oracle,
+  nuclear/ponytail, Optimize-scouting, and capstone-retained findings; an Investigate inventory
+  is an input, not an unbounded historical finding set. The exact next Oracle/reviewer input
+  must enumerate every still-open latest `finding_id` and its disposition evidence; reuse an
+  existing manifest hash when that input is already governed by one, without new hash or
+  manifest machinery. Original child output and parent in-session adjudication stay
+  authoritative; ledger rows are required audit proof, and disposition alone is non-counting.
 - **Qualifying remediation cycle** — рівно одна завершена послідовність: adjudicated
   `CONFIRMED` або `PLAUSIBLE` P0/P1 → один coherent fix → applicable DoD → свіжий незалежний
   `Review` resulting exact identity. Лише завершення всієї послідовності споживає відповідний
@@ -134,6 +143,25 @@ capability не є заміною перевіреного файла.
   partial-attempt loop: до її незалежного `Review` не починати інший patch, а при
   interruption/blocker зупинитися як blocker, не авторизувати replacement patch і не
   обходити межу лічильника.
+- **Conditional temporal-authority matrix.** Deep Plan — або compressed phases 2–4 pass —
+  включає компактну матрицю `authority grant/use | intervening boundary | independent
+  invalidation | required revalidation/compensation/terminal action | test/proof` лише коли
+  одночасно виконуються всі чотири умови:
+  1. verified fact/reference/token/proof authorizes publication, mutation, submit, cleanup,
+     or attribution;
+  2. authority is consumed after an `await`, RPC/process boundary, timeout race, cancellation
+     point, or separate irreversible dispatch;
+  3. the object or authority conditions can independently change; and
+  4. stale consumption can harm correctness, ownership, finality, or non-replayability.
+  Every row maps to at least one planned deterministic transition or fault-injection test. If
+  deterministic testing is genuinely impossible, that row records why and cites a concrete
+  evidence-backed non-testable proof. The conductor checks row coverage before Phase-4 launch,
+  and Phase-4 Review checks it as plan completeness. The matrix lives inside the plan artifact
+  or an existing design-authority document and is covered by that existing manifest member/hash,
+  never a new artifact or member. If plausible temporal-authority work is evaluated but the
+  matrix is not required, record one compact ledger reason naming the first failed condition;
+  do not require per-function/per-`await` N/A records for ordinary async I/O, local immutable
+  values, idempotent reads, or mandatory immediate revalidation.
 - **Phase-4 Review identity** — at launch, the conductor creates one manifest of content
   hashes for every input it passes to Phase-4 Review: the plan, folded critique, inventory,
   and design-authority inputs. The verdict binds to that manifest; any member content change
@@ -169,6 +197,20 @@ capability не є заміною перевіреного файла.
   не patchити автономно. Без рішення це explicit blocker. Вибір користувача не може waive
   `CONFIRMED` P0/P1: його треба виправити й отримати `"no P0-P1"` на новій exact identity
   або завершити процес як blocker; так само не можна waive обовʼязковий gate.
+- **Normative-conflict advancement gate.** When governing rules require incompatible outcomes
+  for the same state, before patching dependent logic use the existing bounded Oracle/user
+  authority to record the sources, precedence, affected semantics, and a
+  scenario→expected-outcome test matrix. Dependent or uncertain exact slices remain blocked
+  pending that resolution. A proven-disjoint exact slice may continue to severity, patch, and
+  review only when no qualifying remediation sequence is open and a new finding transition
+  records that exact slice plus evidence-backed disjointness rationale showing it chooses
+  neither outcome. This transition creates no waiver, precedence, counter event, or exception
+  to partial-attempt, DoD, commit, candidate-invalidation, re-review, or counter rules.
+- **Global repository-candidate promotion gate.** Immediately before `PROMOTED`, require across
+  the governed repository release-candidate scope both zero unresolved safety-semantic
+  contradictions and zero accepted-unfixed or deferred-blocking P0/P1. A proven-disjoint
+  transition never satisfies, bypasses, resolves, or waives either promotion blocker and never
+  permits promotion of a dependent slice.
 
 ## Candidate identity, freeze surface і фінальні докази
 The **canonical freeze actor/input universe** is authoritative resolved DoD commands,
@@ -221,6 +263,15 @@ deferred decisions with rationale/revisit triggers. Never store secrets, full tr
 prompt dumps, token accounting, or optional telemetry/session IDs unless a gate explicitly
 consumes the field. The ledger supplements `TaskCreate`/`TaskUpdate`; it never replaces the
 task tracker.
+
+Only the finding table inside this otherwise mutable ledger is append-only. For every material
+finding in the current bounded finding-bearing output, append:
+`finding_id | source/anchor | raw severity if supplied → parent severity |
+CONFIRMED/PLAUSIBLE/REFUTED | evidence/rationale | next scope/owner and exact next
+Oracle/reviewer input | resolution identity/status`. Corrections append a superseding row;
+never edit or delete finding-table history. A resumed run closes only the latest still-active
+bounded output before advancing. The latest rows must prove the closure/input binding above;
+the original output and parent in-session adjudication remain authoritative.
 
 The actual invocation/read log is post-factum evidence only, not new candidate identity
 membership. Every Phase-6 `Review` and nested `context_builder` invocation must stay within

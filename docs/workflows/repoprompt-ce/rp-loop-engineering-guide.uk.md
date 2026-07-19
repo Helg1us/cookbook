@@ -24,17 +24,19 @@ flowchart TB
   end
   subgraph L2["Design and plan"]
     O["2 · Oracle design"]
-    D["3 · Deep Plan"]
+    D["3 · Deep Plan<br/>conditional 4-part temporal-authority check<br/>+ row→test/proof"]
     K["Bounded design critique"]
     R4["4 · Review plan"]
-    S["2–4 · Compressed pass"]
+    S["2–4 · Compressed pass<br/>same conditional 4-part check<br/>+ row→test/proof"]
   end
   subgraph L3["Build and freeze"]
     OR["5 · Orchestrate"]
     E["Engineer items"]
     ID["Candidate + closed manifest"]
     R6["6 · Read-only Review"]
-    PR["Promote unchanged identity"]
+    GPR{"Global repository promotion guard<br/>0 unresolved safety-semantic contradictions<br/>+ 0 accepted-unfixed/deferred-blocking P0/P1"}
+    PR["PROMOTED · unchanged identity"]
+    GBP["Terminal · promotion blocked"]
   end
   subgraph L4["Quality gates"]
     N["7a · Nuclear"]
@@ -49,7 +51,9 @@ flowchart TB
   C -- "yes; phases 2–4 only" --> S
   R4 --> OR
   S --> OR
-  OR --> E --> ID --> R6 --> PR
+  OR --> E --> ID --> R6 --> GPR
+  GPR -- "pass; proven-disjoint never counts" --> PR
+  GPR -- "blocked" --> GBP
   PR --> N
   PR --> T
   N --> OP
@@ -72,6 +76,8 @@ Small-task compression вирішується після Phase 1 і стиска
 <summary><strong>Phases 3–4 — executable plan and bound verdict</strong></summary>
 
 - **3 · Deep Plan:** повертає plan-only executable artifact, фіксує mandatory involvement choice і виконує built-in bounded design critique; питання додаткового critic лишається deferred нижче.
+- Deep Plan і compressed phases 2–4 pass застосовують однакову conditional `temporal-authority` matrix лише за конʼюнкції чотирьох умов: verified fact/reference/token/proof дає authority для publication/mutation/submit/cleanup/attribution; використання стається після `await`, RPC/process boundary, timeout race, cancellation point або окремого irreversible dispatch; object чи authority conditions можуть змінитися незалежно; stale use може пошкодити correctness, ownership, finality або non-replayability.
+- Кожен рядок матриці планує deterministic transition/fault-injection test або, якщо це справді неможливо, фіксує причину й конкретний evidence-backed non-testable proof. Conductor перевіряє row→test/proof coverage до запуску Phase 4, а Review — як plan completeness. Матриця живе всередині plan artifact або наявного design-authority document і покривається hash цього наявного manifest member; нового artifact/member немає. Якщо plausible випадок перевірено, але predicate не виконався, ledger стисло називає першу невиконану умову без per-function/per-`await` N/A ceremony.
 - **4 · Review:** `pair` перевіряє plan artifact проти folded critique, inventory і design authority.
 - Parent створює content-hash manifest усіх Phase-4 inputs. Verdict `no P0-P1` діє лише для цього manifest; зміна будь-якого member вимагає нового Review.
 </details>
@@ -94,6 +100,8 @@ Small-task compression вирішується після Phase 1 і стиска
 - У Phase 0 parent pin-ить один capstone contract; повний record входить у closed manifest до candidate capture й через його digest — у candidate/promoted identity.
 - Безпосередньо перед фінальним host-level integrated entry point parent re-resolve/recheck-ить promoted capstone identity та виконує contract лише з exact щойно перевірених bytes. Mismatch блокує frozen run; replacement потребує нового Phase-0 run. Повні record/recheck rules — у canonical [`SKILL.md`](../../../skills/rp-loop-engineering/SKILL.md).
 - Parent передає complete promoted Phase-6 record/manifest і immutable known-context records з їхніми digests та full canonical root/base/head; capstone сам володіє lifecycle внутрішніх fresh `pair` children.
+- Normative conflict блокує dependent або uncertain slice до наявного Oracle/user resolution record. Лише recorded proven-disjoint exact slice, що evidence-backed обирає neither outcome, може далі пройти severity/patch/review, і лише коли немає open qualifying remediation sequence; це не змінює DoD, commit, invalidation, re-review, counter чи partial-attempt rules.
+- Окремо перед `PROMOTED` repository release-candidate gate вимагає у всьому governed scope нуль unresolved safety-semantic contradictions і нуль accepted-unfixed або deferred-blocking P0/P1. Proven-disjoint transition не задовольняє, не обходить і не waive-ить цей global blocker та не дозволяє promotion dependent slice.
 </details>
 
 ## Roles та actual child ownership
@@ -120,6 +128,12 @@ Qualifying cycle — завершена P0/P1 remediation sequence; точні c
 ```mermaid
 flowchart TD
   RESULT["Gate result"]
+  CLOSURE{"Latest finding dispositions complete?"}
+  DISPOSITION["Append disposition/superseding row<br/>and bind open IDs to exact next input"]
+  CONFLICT{"Normative conflict?"}
+  DEPENDENT{"Exact slice dependent or uncertain?"}
+  DISJOINT{"Recorded proven-disjoint exact slice<br/>and no open qualifying sequence?"}
+  RESOLVE["Existing Oracle/user authority:<br/>sources + precedence + affected semantics<br/>+ scenario→expected-outcome tests"]
   SEVERITY{"Severity mapping"}
   P2_DECISION{"Patch P2 now?"}
   DEFERRED["Terminal · defer + revisit trigger"]
@@ -135,14 +149,25 @@ flowchart TD
   RESET_ONCE["Reset once to 0"]
   USER_DECISION{"User can resolve intent/scope?"}
   ASK_USER["Ask · no severity waiver"]
+  GLOBAL{"Repository promotion guard:<br/>zero unresolved safety-semantic contradictions<br/>and zero accepted-unfixed/deferred-blocking P0/P1?"}
   BLOCKED["Terminal · explicit blocker"]
   PROMOTED["Terminal · unchanged identity promoted"]
-  RESULT --> SEVERITY
+  RESULT --> CLOSURE
+  CLOSURE -- "no" --> DISPOSITION --> CLOSURE
+  CLOSURE -- "yes" --> CONFLICT
+  CONFLICT -- "no" --> SEVERITY
+  CONFLICT -- "yes" --> DEPENDENT
+  DEPENDENT -- "yes / uncertain" --> RESOLVE --> RESULT
+  DEPENDENT -- "no" --> DISJOINT
+  DISJOINT -- "yes" --> SEVERITY
+  DISJOINT -- "no" --> RESOLVE
   SEVERITY -- "P2" --> P2_DECISION
   P2_DECISION -- "no" --> DEFERRED
   P2_DECISION -- "yes" --> P2_PATCH --> NEW_CANDIDATE
   SEVERITY -- "P0/P1" --> EVIDENCE
-  SEVERITY -- "none" --> PROMOTED
+  SEVERITY -- "none" --> GLOBAL
+  GLOBAL -- "pass; proven-disjoint never counts" --> PROMOTED
+  GLOBAL -- "blocked" --> BLOCKED
   EVIDENCE -- "REFUTED" --> REFUTED_DONE
   EVIDENCE -- "CONFIRMED / PLAUSIBLE" --> CYCLE_CAP
   CYCLE_CAP -- "yes" --> REMEDIATE --> REREVIEW --> RESULT
@@ -159,7 +184,7 @@ Plan і code counters незалежні: **3 qualifying cycles на epoch** і 
 
 Closed manifest обмежує inputs/actors, щоб Phase 6 read-only перевірила одну immutable candidate identity. До candidate capture кожна base→head changed gitlink мусить мати immutable already-reviewed exact transition contract і record/digest у manifest за verified `rp-capstone-review`; інакше Phase 6 блокується. `no P0-P1` плюс unchanged proof promote-ить саме цю identity без recapture. Релевантна mutation інвалідовує evidence й запускає canonical DoD/candidate/full-Phase-6/promotion/Phase-7 rerun; точні predicates, contract schema, identity fields і restart details див. у canonical `SKILL.md`.
 
-Ledger залишається non-authoritative й має лише режими **PROVEN EXCLUDED** або **CLEAN GATE WORKTREE**; їхні predicates і disposition rules визначає canonical `SKILL.md`.
+Ledger залишається non-authoritative й має лише режими **PROVEN EXCLUDED** або **CLEAN GATE WORKTREE**; їхні predicates і disposition rules визначає canonical `SKILL.md`. Лише finding table у цьому загалом mutable ledger є append-only: для поточного bounded finding-bearing output кожна material finding мусить мати latest disposition, а correction додає superseding row замість переписування історії. До closure не дозволено наступний patch чи Oracle/reviewer scope; exact next input перелічує всі latest-open IDs з disposition evidence. Original output та parent in-session adjudication лишаються authoritative, а resumed run спершу закриває latest still-active bounded output.
 
 ## Do-not-duplicate matrix
 
