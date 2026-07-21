@@ -1,442 +1,432 @@
 ---
 name: rp-loop-engineering
-description: "Універсальний rp-ce loop-engineering флоу для нетривіальних задач: investigate → oracle-дизайн → deep-plan → bounded pair review плану → orchestrate → bounded pair review коду → frozen evidence → pair nuclear+ponytail → optimize → rp-capstone-review. Змістовна робота делегується RepoPrompt-сабагентам; фінальний capstone виконується host-level за власним contract, коміт після кожної адекватної зміни; після трьох remediation-циклів — Investigate + Oracle."
+description: "Seven-phase RepoPrompt engineering conductor with a WIP=1 Goal Slice Graph, deterministic event fold, integrated freeze, and closed release terminals."
 ---
 
-# rp-ce Loop-Engineering — універсальний runbook
+# RepoPrompt Loop Engineering Contract
 
-Задача: $ARGUMENTS
+Task: $ARGUMENTS
 
-Ти — оркестратор повного інженерного циклу через RepoPrompt-CE (MCP `RepoPromptCE`).
-Уся змістовна робота (дослідження, план, імплементація, ревʼю) виконується **в окремих
-RepoPrompt-сабагентах**, не в головній сесії. Головна сесія: координує, стерить, **незалежно
-верифікує**, комітить, веде трек-лист (TaskCreate/TaskUpdate — по таску на фазу).
+## Authority and lifecycle
 
-## Фаза 0 — Прив'язка (перед будь-чим)
-`bind_context op=bind working_dirs=[<repo>]`; якщо кілька кандидатів — додай `window_id`.
-⚠ `agent_run op=start` вимагає tab-контекст: якщо старт падає з "requires explicit tab
-context" — `bind_context op=list` → `op=bind context_id=<активний таб>`. Якщо пізніше
-"cannot inherit the explicit-tab worktree" — перебиндись на window-only і повтори.
+### AUTH-1 — authority and ownership
 
-Initialize exactly one task-scoped ledger at
-`.tmp/rp-loop-engineering/<task-slug>/gate-ledger.md`. Its disposition and contents are
-governed only by the canonical ledger rule in the freeze section below.
+The parent conductor solely owns routing, user I/O, severity adjudication, identities, state, budgets, escalation, and release decisions. It delegates investigation, planning, implementation, and review to verified RepoPrompt leaves, never implements leaf scope in the host session, and limits children to explicit scope and immutable raw output.
 
-## Пайплайн (7 фаз)
+Git identities and immutable raw child outputs own behavioral/evidence facts; parent adjudication events own severity/disposition; the deterministic fold of a validated event chain owns orchestration state and counters. This skill alone owns lifecycle, states, budgets, triggers, invalidation, and terminals; the localized guide is descriptive and this skill wins conflicts. Capstone internals belong only to the pinned `rp-capstone-review/SKILL.md` contract.
 
-| # | Фаза | Чим запускати | Вихід | Цикл? |
-|---|------|---------------|-------|-------|
-| 1 | Дослідження | RP workflow **`Investigate`**; вузькі probes — `explore` | file:line edit-site inventory / root cause; Investigate звітує шлях report (default convention `docs/investigations/`), conductor записує його | — |
-| 2 | Дизайн (якщо є відкриті дизайн-рішення) | **`oracle_send`** (chat), за bounded Oracle contract нижче | converged design або escalation/blocker | за bounded Oracle contract нижче |
-| 3 | Детальний план | RP workflow **`Deep Plan`** → `docs/plans/`; потім bounded **design-critique** (agent_run `model_id=design`, max-1-page, ТІЛЬКИ прогалини/суперечності/порядок — НЕ переписування дизайну) → зафолдити | executable по-кроковий план | — |
-| 4 | Ревʼю плану | RP workflow **`Review`** як `pair`: звірити план проти critique+inventory; явно вказати: review only plan file as a document artifact, do not ask for git comparison scope | 0 P0-P1 у плані | до 3 qualifying plan-remediation cycles; далі Investigate + Oracle |
-| 5 | Імплементація | RP workflow **`Orchestrate`** (`agent_run workflow_name="Orchestrate"`) | код, коміт+DoD після КОЖНОГО кроку | — |
-| 6 | Ревʼю коду | RP workflow **`Review`** як `pair` на діффі імплементації | 0 P0-P1 на immutable candidate identity | до 3 qualifying code-remediation cycles; далі Investigate + Oracle |
-| 7 | Якість + капстон | після promotion: canonical **nuclear** + **ponytail** skills як `pair` (паралельно) → RP workflow **`Optimize`** (запускати завжди: виконати Phase-1 scouting; повний performance loop продовжувати лише за наявності вимірюваної метрики або hot path, інакше зафіксувати explicit N/A verdict) → verified host-level **`rp-capstone-review`** integrated entry point | фінальний gate на тій самій promoted frozen identity | будь-яка gate-driven мутація → DoD, новий candidate, повна фаза 6, promotion і всі gates фази 7 |
+### TERM-1 — closed outcomes
 
-Після Investigation прийняти бінарне рішення про small-task compression і записати
-eligibility та reason у ledger; невизначеність завжди обирає повний шлях. Фази 2-4 можна
-обʼєднати в один стислий plan/critique/review pass лише коли немає open design decision,
-external/public contract, concurrency, security, persistence, migration risk або
-cross-module ownership change. Compression зменшує лише ceremony й нічого не auto-pass:
-будь-який P0/P1 входить у повний звичайний remediation loop. **Фази 1 і 5-7 залишаються
-обовʼязковими**. Не вводити Small/Standard/Critical lanes. Для trivial tasks використовувати
-інший lightweight workflow, а не послаблювати цей conductor.
+Progress states are `PLANNED`, `CLOSURE_PROVEN`, `READY`, `IMPLEMENTING`,
+`LOCAL_DOD_PASS`, `COMMITTED_CANDIDATE`, `INDEPENDENT_REVIEW_PASS`, and `ACCEPTED`.
+Reroutes or resumable pauses are `RESLICE_REQUIRED`, `REDESIGN_REQUIRED`,
+`HOST_RECOVERY_REQUIRED`, and `USER_DECISION_REQUIRED`. `DISCOVERY_REQUIRED` is a
+closure disposition, not a state. The only goal terminals are `RELEASED` and
+`BLOCKED_WITH_PROOF`.
 
-## Bounded Oracle contract
-Oracle convergence у фазі 2 та в remediation escalation: після initial
-answer провести щонайменше один і максимум три **substantive critique-response rounds**.
-Раунд рахується лише коли critique містить новий argument/evidence, а Oracle відповідає по
-суті; clarification або acknowledgement не рахуються substantive rounds, але кожен споживає
-окремий guard максимум двох consecutive non-substantive exchanges; його exhaustion завершує
-contract за тим самим terminal правилом нижче. Unresolved behavior/scope негайно
-ескалювати, не вичерпуючи round budget. Якщо після третього substantive round лишається
-material disagreement, звертатися до користувача лише коли його рішення здатне розвʼязати
-питання; інакше завершити як explicit blocker. Намір користувача не може waive
-`CONFIRMED` P0/P1.
+## Seven-phase conductor
 
-## Контракт реального виклику
-У фазі 0 один раз виконати `agent_manage op=list_workflows` і
-`agent_manage op=list_agents`; зберегти exact workflow та role names verbatim без case
-normalization і без висновків із подібних назв. Required workflow identities:
-`Investigate`, `Deep Plan`, `Review`, `Orchestrate`, `Optimize`.
+Phase 0 is bootstrap; the seven execution phases are Phases 1–7.
 
-Для кожного workflow-backed leaf:
-1. Launch each registered `Investigate`, `Deep Plan`, `Review`, `Orchestrate`, or `Optimize`
-   workflow as `agent_run op=start workflow_name="<verbatim name>"` without `model_id`,
-   intentionally accepting RepoPrompt's default `pair` role; reserve explicit `explore` and
-   `design` for non-workflow probes and critiques, and leave `engineer` dispatch to `Orchestrate`.
-2. Якщо workflow відсутній — знайти в active host або repository inventory повний,
-   читабельний `SKILL.md` відповідної capability і перевірити його. Host-registered skill
-   name, спільне походження або подібна назва не доводять workflow/skill equivalence.
-3. For a verified-`SKILL.md` fallback, launch a fresh RepoPrompt agent as `pair` unless
-   the complete leaf contract explicitly requires another role returned by `list_agents`; if
-   that role is unavailable, record a blocker and stop. Наказати агенту прочитати весь
-   перевірений файл і виконати його verbatim для explicit scope. Це alternate implementation,
-   не доведений workflow alias; conductor перевіряє очікуваний output і stop gate фази.
-4. Якщо повний skill contract або launch surface недоступні — записати explicit blocker
-   і зупинитися. Не переносити змістовну роботу в host conductor і не
-   заміняти відсутній contract довільним переказом.
+| Phase | Required responsibility |
+|---|---|
+| 0 | Bind context; verify workflows/roles; pin capstone; create an isolated run and event genesis |
+| 1 | Run `Investigate` for root cause, edit sites, consumers, and discovery evidence |
+| 2 | Use bounded Oracle only for unresolved behavior, authority, ownership, or graph decisions |
+| 3 | Run `Deep Plan` to produce one Goal Slice Graph, closure records, DoD, and release plan |
+| 4 | Fold a bounded design critique, then run document-only `Review` on the exact input manifest within `PLAN-3` until `no P0-P1` |
+| 5 | Execute every graph node serially through the WIP=1 slice state machine |
+| 6 | Run integrated DoD, capture the closed candidate, read-only `Review` it, and promote the unchanged identity |
+| 7 | On that identity run nuclear and ponytail, `Optimize`, then the verified host-level capstone |
 
-Для кожного conductor-launched RepoPrompt leaf launch misfire означає zero tool uses або immediate exit. Після першого
-misfire виконати **рівно один** fresh relaunch і передати повний verified leaf contract
-verbatim разом з тим самим scope та всіма binding/Git/`context_builder` requirements.
-Другий misfire блокує leaf і всю його фазу. Цей budget окремий від stall retries та діє
-per leaf per gate run; нова promoted freeze identity починає новий gate run і новий
-misfire budget.
+A small goal is a one-node graph; no alternate lifecycle or compressed lane exists.
 
-Same-named host skill може бути лише джерелом contract після знаходження й перевірки його
-повного файла; host-side invocation за ім'ям не є fallback для змістовної роботи.
+## Verified launch and Oracle
 
-Skill files шукати лише в реально доступних для active host місцях:
-- addressable cookbook checkout;
-- host symlink views: `$HOME/.agents/skills/<name>/SKILL.md`;
-- `$HOME/.claude/skills/<name>/SKILL.md`.
-Перед передачею RP-агенту або host-level invocation шлях має бути абсолютним, читабельним і вказувати на повний файл.
-Прив'язка unrelated target repo не робить cookbook-relative `skills/<name>/SKILL.md`
-доступним.
+### LAUNCH-1 — discovery and leaves
 
-`rp-ponytail-review` і `rp-thermo-nuclear-code-quality-review` — individual skill leaves.
-Composite workflow, що містить їх, не задовольняє жодну з цих leaf capabilities.
+In Phase 0 call RepoPrompt workflow/role inventories once and preserve exact case-sensitive names. Required workflows are `Investigate`, `Deep Plan`, `Review`, `Orchestrate`, and `Optimize`; launch each registered workflow verbatim without a model pin, accepting its default role. Reserve `explore` for narrow read-only probes and `design` for bounded critique; `Orchestrate` owns engineer dispatch. Never pin a concrete agent or model ID.
 
-У фазі 0 знайти `rp-capstone-review/SKILL.md` в addressable cookbook checkout,
-`$HOME/.agents/skills/rp-capstone-review/SKILL.md` або
-`$HOME/.claude/skills/rp-capstone-review/SKILL.md` за тими самими verified-skill rules і
-вибрати рівно один contract. Його absolute logical discovery path перетворити на absolute,
-фізично resolved canonical target; довести, що target — читабельний regular file; рівно один
-раз прочитати всі bytes в immutable buffer і записати їх SHA-256 та byte length. Якщо target
-перебуває в accessible Git checkout і path tracked at HEAD, додатково записати canonical repo
-root, repo-relative path, object format, tree mode/type, `HEAD:path` blob OID і доказ, що
-фактичні bytes тотожні цьому blob. Не pin-ити source-repo HEAD: unrelated commit зі сталим
-blob лишається valid. Сукупність цих полів є immutable `capstone_contract_record` і
-authoritative in-session state; ledger — лише audit mirror. Відсутній, нечитабельний або
-неповний capstone contract — explicit blocker. Host-registered name, походження чи схожа
-capability не є заміною перевіреного файла.
+If a workflow is absent, locate and read a complete matching `SKILL.md` in an addressable cookbook checkout or verified host symlink view; similar names/origin do not prove equivalence. A fresh `pair` may execute it verbatim unless it requires another available registered role. If the complete contract/capability is unavailable, use `RECOVERY-1`; never paraphrase a substitute or move substantive work to host.
 
-## Правила циклів (loop-engineering)
-- Вести два незалежні лічильники, початково `0`: `plan_remediation_count` для фази 4 та
-  `code_remediation_count` для фаз 6-7. Plan-цикл не споживає code-бюджет і навпаки.
-  Кожен лічильник належить поточній remediation epoch відповідного artifact.
-- Before counters or stop rules apply, the parent conductor adjudicates every child/leaf
-  finding into P0/P1/P2 by impact and evidence, never by leaf section or tag. Nuclear and
-  Ponytail are not expected to emit P0/P1/P2. After this mapping, the existing
-  CONFIRMED/PLAUSIBLE/REFUTED adjudication applies.
-- For the single bounded finding-bearing child output currently under adjudication, no next
-  patch or Oracle/reviewer scope is authorized until every material finding has a latest
-  disposition in the append-only finding table below. This covers Review, critique, Oracle,
-  nuclear/ponytail, Optimize-scouting, and capstone-retained findings; an Investigate inventory
-  is an input, not an unbounded historical finding set. The exact next Oracle/reviewer input
-  must enumerate every still-open latest `finding_id` and its disposition evidence; reuse an
-  existing manifest hash when that input is already governed by one, without new hash or
-  manifest machinery. Original child output and parent in-session adjudication stay
-  authoritative; ledger rows are required audit proof, and disposition alone is non-counting.
-- **Qualifying remediation cycle** — рівно одна завершена послідовність: adjudicated
-  `CONFIRMED` або `PLAUSIBLE` P0/P1 → один coherent fix → applicable DoD → свіжий незалежний
-  `Review` resulting exact identity. Лише завершення всієї послідовності споживає відповідний
-  лічильник; P0/P1 з gate фази 7 споживає `code_remediation_count`.
-- Не рахуються: baseline reviews; `REFUTED`; duplicate findings; збір, дедуплікація чи
-  класифікація; P2; read-only verification; запит або очікування користувача; stalls,
-  waits/steers, retries та misfires; supplemental adversarial verify; no-op proposal, patch
-  або інша подія без зміни identity. Зміна лише candidate surface, що вимагає нового
-  Phase-6 Review, але не містить adjudicated P0/P1 patch, не споживає
-  `code_remediation_count`. Незавершена qualifying послідовність не дозволяє
-  partial-attempt loop: до її незалежного `Review` не починати інший patch, а при
-  interruption/blocker зупинитися як blocker, не авторизувати replacement patch і не
-  обходити межу лічильника.
-- **Conditional temporal-authority matrix.** Deep Plan — або compressed phases 2–4 pass —
-  включає компактну матрицю `authority grant/use | intervening boundary | independent
-  invalidation | required revalidation/compensation/terminal action | test/proof` лише коли
-  одночасно виконуються всі чотири умови:
-  1. verified fact/reference/token/proof authorizes publication, mutation, submit, cleanup,
-     or attribution;
-  2. authority is consumed after an `await`, RPC/process boundary, timeout race, cancellation
-     point, or separate irreversible dispatch;
-  3. the object or authority conditions can independently change; and
-  4. stale consumption can harm correctness, ownership, finality, or non-replayability.
-  Every row maps to at least one planned deterministic transition or fault-injection test. If
-  deterministic testing is genuinely impossible, that row records why and cites a concrete
-  evidence-backed non-testable proof. The conductor checks row coverage before Phase-4 launch,
-  and Phase-4 Review checks it as plan completeness. The matrix lives inside the plan artifact
-  or an existing design-authority document and is covered by that existing manifest member/hash,
-  never a new artifact or member. If plausible temporal-authority work is evaluated but the
-  matrix is not required, record one compact ledger reason naming the first failed condition;
-  do not require per-function/per-`await` N/A records for ordinary async I/O, local immutable
-  values, idempotent reads, or mandatory immediate revalidation.
-- **Phase-4 Review identity** — at launch, the conductor creates one manifest of content
-  hashes for every input it passes to Phase-4 Review: the plan, folded critique, inventory,
-  and design-authority inputs. The verdict binds to that manifest; any member content change
-  invalidates it and requires a fresh Review. Code identity before Phase 6 is the immutable
-  candidate identity on the future freeze surface; after successful read-only Phase 6, that
-  exact identity becomes the promoted Phase-7 frozen identity under the rules below. A normal
-  patch changes its artifact identity but does not reset the counter.
-- Initial remediation epoch may consume at most three qualifying cycles. Before each P0/P1
-  patch check its counter: `0..2` authorizes one qualifying sequence, counted only after the
-  fresh independent `Review`; at `3`, a fourth patch in that epoch is forbidden.
-- After the initial epoch is exhausted, at most **one** new remediation epoch may open. It
-  requires a full divergence summary (current identity, three attempts, findings, DoD/re-review
-  outcomes, unresolved/regressed items, contradictions, assumptions), completed `Investigate`,
-  and converged Oracle under the bounded contract. Immediately before its first patch, reset
-  the relevant counter to `0` and record old identity, reset reason, and new plan/design
-  authority; immediately after that patch record the new identity.
-- If this second epoch exhausts its three-cycle budget, no further reset, epoch, or local patch
-  is allowed. Use the user only when an intent/scope/classification decision can resolve it;
-  otherwise stop as an explicit blocker. User intent can never waive a confirmed P0/P1.
-- Фаза 4 завершується лише явним `"no P0-P1"`, привʼязаним до recorded Phase-4 Review
-  input manifest above. Після plan patch створити новий manifest і повторити Review. Після
-  третьої невдалої remediation застосувати одноразове second-epoch правило вище.
-- Для code patch у фазі 6 або 7: застосувати межу epoch вище, виконати DoD і сформувати
-  новий candidate за повними правилами surface нижче. Після явного `"no P0-P1"` і доказу,
-  що candidate не змінився, promote exact same identity без recapture, потім повторити
-  **всі** gates фази 7 у canonical order: nuclear, ponytail, `Optimize` з новим Phase-1
-  scouting (і, якщо обґрунтовано, новим explicit N/A), `rp-capstone-review`.
-- Discretionary P2 changes, які вирішено робити, обовʼязково згрупувати й завершити до
-  candidate capture. P2 можна відкласти без patch; будь-який P2 patch після promotion
-  інвалідовує frozen identity і вимагає повного шляху DoD → новий candidate → фаза 6 →
-  promotion exact same identity → усі gates фази 7.
-- Знахідки, що змінюють поведінку/скоуп, негайно передавати користувачу з рекомендацією,
-  не patchити автономно. Без рішення це explicit blocker. Вибір користувача не може waive
-  `CONFIRMED` P0/P1: його треба виправити й отримати `"no P0-P1"` на новій exact identity
-  або завершити процес як blocker; так само не можна waive обовʼязковий gate.
-- **Normative-conflict advancement gate.** When governing rules require incompatible outcomes
-  for the same state, before patching dependent logic use the existing bounded Oracle/user
-  authority to record the sources, precedence, affected semantics, and a
-  scenario→expected-outcome test matrix. Dependent or uncertain exact slices remain blocked
-  pending that resolution. A proven-disjoint exact slice may continue to severity, patch, and
-  review only when no qualifying remediation sequence is open and a new finding transition
-  records that exact slice plus evidence-backed disjointness rationale showing it chooses
-  neither outcome. This transition creates no waiver, precedence, counter event, or exception
-  to partial-attempt, DoD, commit, candidate-invalidation, re-review, or counter rules.
-- **Global repository-candidate promotion gate.** Immediately before `PROMOTED`, require across
-  the governed repository release-candidate scope both zero unresolved safety-semantic
-  contradictions and zero accepted-unfixed or deferred-blocking P0/P1. A proven-disjoint
-  transition never satisfies, bypasses, resolves, or waives either promotion blocker and never
-  permits promotion of a dependent slice.
+Check every conductor-launched output against its artifact/gate. Monitor `Orchestrate` by long-poll; silence is not cancellation evidence. Require positive idle/no-progress evidence, steer first, then allow one narrower fresh recovery attempt with the entire verified contract and original binding/Git requirements. Independently run DoD, inspect commit scope, and clean up finished sessions.
 
-## Candidate identity, freeze surface і фінальні докази
-The **canonical freeze actor/input universe** is authoritative resolved DoD commands,
-Phase-6 `Review` including every nested `context_builder` invocation, and Phase-7 gates.
-Before candidate capture, record one **closed allowed input/scope manifest** containing every
-repo/worktree/submodule/external path and the permitted traversal/discovery bounds for all
-actors in that universe. A covered path is within those bounds or otherwise directly consumed.
-Include the complete immutable known-context record set consumed by Phase-7 gates and its
-canonical digest before capture; derive the digest under the verified capstone contract without
-silently widening or recapturing this frozen input later. Before candidate capture, include the
-complete Phase-0 `capstone_contract_record` in this closed manifest; its canonical manifest
-digest is therefore bound into candidate and promoted identity.
-Before candidate capture, detect every base-to-head changed gitlink. For each, require the
-immutable already-reviewed exact transition contract defined by the verified `rp-capstone-review`
-skill and bind its record and digest into the closed manifest; otherwise block before Phase 6.
-Reference that contract for the record schema rather than duplicating it here.
+### LAUNCH-2 / CAPSTONE-1 — verified gate contracts
 
-Before every Phase-6 `Review`, capture an immutable candidate identity over the closed surface
-defined by this manifest. The canonical generic **EXCLUDED** predicate is:
-`((the exact path is outside every permitted traversal/discovery bound in the closed manifest)
-OR (every applicable command, Review/context_builder invocation, and gate explicitly ignores
-it)) AND (the path is not directly consumed by any actor in the canonical universe)`.
-Record enough path/type/content metadata to detect create/delete/modify:
-- full base/head OIDs, clean staged/unstaged tracked states, and the closed manifest with
-  permitted working directories/bounds/ignore rules and each submodule's OIDs/status;
-- each non-ignored untracked path as **included** with a recursive path/type/content
-  manifest/hash, **excluded** only under the canonical predicate, or **cleaned** before capture;
-- inspect ignored paths when covered or potentially relevant as generated input, cache/config,
-  or discovery target; use the same predicate for exclusion and otherwise include their state.
+In Phase 0 resolve and pin the full readable contracts for exact identities `rp-ponytail-review` at `skills/rp-ponytail-review/SKILL.md` and `rp-thermo-nuclear-code-quality-review` at `skills/rp-thermo-nuclear-code-quality-review/SKILL.md`. Record each logical path, physical canonical target, byte length, and SHA-256. Immediately before every ponytail, thermo-nuclear, or nuclear gate, re-read the complete same contract, reverify those fields, and launch a fresh registered RepoPrompt `pair` via `agent_run` with its absolute verified path and an instruction to execute it verbatim on the exact candidate. A same-named workflow/skill, composite, registry lookup, excerpt, or paraphrase cannot substitute; only the full verified-`SKILL.md` fallback in `LAUNCH-1` is legal, and unavailable required role/capability follows `RECOVERY-1`.
 
-### Canonical ledger rule
-The exact mutable ledger path is
-`.tmp/rp-loop-engineering/<task-slug>/gate-ledger.md`. Keep it uncommitted by default and
-non-authoritative; Git state and original agent outputs remain authoritative. After resolving
-the canonical freeze universe, scopes, and generic EXCLUDED predicate above, this
-ledger-specific exception has exactly two viable modes:
-- **PROVEN EXCLUDED** — the exact ledger path satisfies the full canonical generic EXCLUDED
-  predicate above. Ledger updates remain outside the candidate/frozen surface.
-- **CLEAN GATE WORKTREE** — all actors in the canonical universe operate against the same
-  recorded isolated clean materialized worktree/frozen identity; the ledger is absent there
-  and no actor reads it from the external orchestration worktree. Ledger updates remain outside
-  that gate worktree/surface.
-If neither mode is proved, stop with an explicit blocker before candidate capture. The ledger
-never receives an `included` or standalone `cleaned` disposition; the general
-include/clean/clean-materialized-worktree fallback remains available only for other inputs.
+In Phase 0 resolve exactly one readable regular `rp-capstone-review/SKILL.md` to its physical canonical target and read its bytes once. The `capstone_contract_record` stores logical path, canonical target, byte length, SHA-256, and, when tracked, repository root, relative path, object format, tree mode/type, `HEAD:path` blob OID, and byte equality. Pin the blob, not unrelated repository HEAD.
 
-Record artifact identities, tracked/index/submodule evidence, untracked dispositions, phase
-states, remediation counters, adjudicated findings, blockers, required gate outcomes, and
-deferred decisions with rationale/revisit triggers. Never store secrets, full transcripts,
-prompt dumps, token accounting, or optional telemetry/session IDs unless a gate explicitly
-consumes the field. The ledger supplements `TaskCreate`/`TaskUpdate`; it never replaces the
-task tracker.
+Immediately before capstone, re-resolve the original logical path, require the same target, read fresh bytes once, and reverify every field. Any difference produces `BLOCKED_WITH_PROOF`; no in-run re-pin/replacement is allowed. Invoke the integrated entry point from those bytes; do not launch capstone as a RepoPrompt child, wrap its leaves, or copy its protocol.
 
-Only the finding table inside this otherwise mutable ledger is append-only. For every material
-finding in the current bounded finding-bearing output, append:
-`finding_id | source/anchor | raw severity if supplied → parent severity |
-CONFIRMED/PLAUSIBLE/REFUTED | evidence/rationale | next scope/owner and exact next
-Oracle/reviewer input | resolution identity/status`. Corrections append a superseding row;
-never edit or delete finding-table history. A resumed run closes only the latest still-active
-bounded output before advancing. The latest rows must prove the closure/input binding above;
-the original output and parent in-session adjudication remain authoritative.
+### ORACLE-1 — bounded convergence
 
-The actual invocation/read log is post-factum evidence only, not new candidate identity
-membership. Every Phase-6 `Review` and nested `context_builder` invocation must stay within
-the closed manifest. Out-of-manifest access aborts Phase 6, forbids promotion, and requires a
-new candidate/manifest; this surface-only restart does not consume `code_remediation_count`.
-When the generic EXCLUDED predicate fails, include the input, clean it, or run all actors in
-the canonical universe against the same recorded isolated clean materialized worktree/frozen
-identity, with no external-orchestration-worktree reads of excluded inputs.
+After an initial Oracle answer, perform at least one and at most three substantive critique-response rounds; only new argument/evidence answered on substance counts. Clarification/acknowledgement does not count, with at most two consecutive non-substantive exchanges. Unresolved user-owned behavior/scope immediately pauses at `USER_DECISION_REQUIRED`; after the bound use it only if user choice can resolve the issue, else `BLOCKED_WITH_PROOF`. Oracle cannot waive confirmed P0/P1, triggers, gates, or lifecycle rules.
 
-A clean submodule is represented by its recorded OID/status. A dirty submodule is a blocker
-unless a recursive materialized-content identity sufficient to detect create/delete/modify is
-captured and included in both the candidate identity and authoritative final report.
+## Goal Slice Graph
 
-Phase-6 reviewer отримує immutable candidate identity та перевіряє саме її. Review має бути
-read-only та in-manifest. Після його явного `"no P0-P1"` повторно обчислити всі складові
-identity лише для
-доказу незмінності та порівняти з recorded candidate. Якщо вони тотожні, promote **цей самий**
-candidate record як Phase-7 frozen identity без нового capture або зміни identity. Phase-7
-reviewers отримують саме promoted frozen identity.
+### GRAPH-1 — node contract
 
-Будь-яка зміна candidate surface до promotion — tracked worktree, index, commit/HEAD,
-submodule, included input, новий undisposed non-ignored path або релевантний ignored input —
-скасовує результат поточного Phase-6 Review і запускає **повну** фазу 6 на новій candidate
-identity. Такий surface-only restart без adjudicated P0/P1 patch не споживає
-`code_remediation_count`.
+Phase 3 produces one acyclic Goal Slice Graph. Each node has exactly `slice_id`, `behavior_id`, `owned_transition`, `done_when`, `depends_on[]`, `initial_closure_record`, `validation_contract`, `risk_tags[]`, and `status`. It owns one observable behavior or authority/ownership transition and one boolean `done_when`, which may aggregate assertions but returns one result. Split independent transitions/outcomes on their dependency edge; no file/LOC cap applies. `behavior_id` is stable lineage; `slice_id` identifies a decomposition.
 
-Будь-яка post-promotion зміна frozen surface інвалідовує докази фаз 6-7. Після invalidation
-виконати DoD для зміни shipping artifact, створити новий candidate, повторити повну фазу 6,
-promote exact same identity після доказу незмінності та повторити nuclear, ponytail,
-`Optimize` і `rp-capstone-review`. Adversarial verify може лише доповнювати ці докази,
-але ніколи не замінює жоден required gate.
+### GRAPH-2 — ordering and WIP
 
-## DoD кожного кроку імплементації (не торгується)
-До імплементації визначити exact commands і записати їх у ledger. Пріоритет джерел:
-`AGENTS` → repository CI → documented Make/package scripts → ecosystem-standard defaults.
-CI configs без explicit required markers означають усі default jobs, релевантні зміненим
-components і shared/public surface.
+The graph is an ordering/closure device, not a parallel scheduler. It must be acyclic, have
+explicit dependency edges, and assign each transition to one lineage. `READY` requires every
+dependency `ACCEPTED`, current Phase-4 authority, and current `CLOSURE_PROVEN`. Exactly one
+node may be active from `IMPLEMENTING` through `INDEPENDENT_REVIEW_PASS`; entering `ACCEPTED`
+releases the slot, while that node's open remediation sequence or pause retains it.
 
-Нередукований floor:
-- build та/або typecheck, де застосовно;
-- scoped static analysis;
-- relevant deterministic tests;
-- final gate, що покриває affected components і shared/public surface.
+### GRAPH-3 — mutation and total invalidation
 
-Відсутня або недоступна категорія потребує explicit evidence-backed N/A; мовчазне
-вилучення заборонене. Go-приклад, не універсальний contract:
+Changing `owned_transition`, `done_when`, `depends_on[]`, `validation_contract`, or behavior ownership invalidates the Phase-4 manifest, affected nodes/transitive dependents, their verdicts/acceptances, and all downstream integrated freeze/release evidence. The fold retains each executed behavior's first recorded `slice_base` and ordered committed-range lineage. It recomputes `accepted_head` as the head of the maximal execution-ordered prefix whose acceptance evidence remains current, or `run_base` when empty; no later OID bridges an invalidated gap. Commits remain forward history; affected nodes return to `PLANNED`, and Phases 3–4 plus WIP=1 recertification/re-review cover the earliest invalidated/original base through current `HEAD`, including affected later commits, before the frontier crosses them. Evidence-only recertification may preserve OIDs but never substitutes a later/current `accepted_head` for that retained base. Re-slicing changes `slice_id` but preserves `behavior_id` budget. A user-approved semantic replacement creates a predecessor-linked lineage and obsoletes findings by changed goal, never waiver.
+
+Any semantic closure-field change recomputes `closure_hash` and invalidates every proof,
+candidate, verdict, acceptance, dependent, and integrated record bound to the old hash. Before
+`READY`, update and prove normally. After `READY`, classify under `CLOSURE-3`, return the
+node to `PLANNED`, then use normal implementation or the evidence-only recertification edge in
+`SLICE-1`. A second distinct miss cannot use recertification.
+
+## Phase 0 and Phases 1–4
+
+### RUN-1 — isolated run
+
+Create or verify an isolated clean worktree on a dedicated branch such as
+`rp-loop/<task-slug>` with no upstream and no unrelated user changes. Record `run_id`,
+full `run_base`, branch/worktree identity, repository instructions, verified inventory, and
+initial status. The conductor must not push, publish, merge, or dispatch release actions before
+integrated promotion.
+
+### RUN-2 — forward-only history
+
+Once any OID is recorded, amend, reset, rebase, force-update, or other history rewrite is
+forbidden. Remediation and abandoned approaches use forward superseding or revert commits.
+`accepted_head` begins at `run_base`, advances after slice acceptance, and moves back only by the fold recomputation in `GRAPH-3`, never by history rewrite. Every commit is conventional
+and independently checked for scope and applicable DoD.
+
+### PLAN-1 — exact planning authority
+
+Phase 1 inventories root cause, edit sites, direct consumers, dynamic-discovery risks, and instructions; Phase 2 resolves only open design questions. Phase 3 produces graph/plan, closure records, validation contracts, and release plan, then folds accepted findings from one bounded design critique.
+
+Before Phase 4, materialize a canonical manifest whose members record `member_role`, immutable path, exact byte length, and SHA-256. Include Goal Slice Graph/plan, Investigation inventory, every design-authority input, and explicit `folded_critique` exact bytes after folding. The `no P0-P1` verdict binds to the complete manifest; any omitted member, missing critique, or path/byte/hash change invalidates launch/verdict and requires fresh Phase-4 Review.
+
+### PLAN-2 — temporal authority and conflicts
+
+When a verified fact/reference/token/proof authorizes publication, mutation, submit, cleanup,
+or attribution after an await/RPC/process/timeout/cancellation/irreversible boundary, can
+independently change, and stale use can harm correctness, ownership, finality, or
+non-replayability, the plan includes:
+`authority grant/use | intervening boundary | independent invalidation |
+required revalidation/compensation/terminal action | test/proof`.
+Every row maps to a deterministic transition/fault test or an evidence-backed non-testable
+proof. The matrix is part of an existing manifest member. If evaluated but not applicable,
+record the first failed condition without per-function ceremony.
+
+Before any affected node becomes `READY`, resolve incompatible governing rules through the
+bounded Oracle/user authority: sources, precedence, affected semantics, and
+scenario-to-expected-outcome tests. Dependent or uncertain nodes remain `PLANNED`. There is no
+disjoint bypass; the global release guard still applies.
+
+### PLAN-3 — bounded Phase-4 remediation
+
+One stable Phase-4 plan lineage, created by the initial graph manifest and preserved across manifest hashes, permits three completed qualifying cycles per epoch and at most two epochs. A cycle is a current-manifest `CONFIRMED`/`PLAUSIBLE` P0/P1, one coherent plan/graph correction, a new canonical manifest, and independent Phase-4 Review. Baselines, duplicates, P2, host failures, incomplete sequences, and invalidation without a P0/P1 correction do not count; an incomplete sequence blocks another correction. Before epoch 2, record divergence, complete `Investigate`, and converge bounded Oracle. Exhausted epoch 2 yields `USER_DECISION_REQUIRED` only for a legitimate goal choice, otherwise `BLOCKED_WITH_PROOF`. Existing finding, remediation, and verdict events record the cycles under `scope="phase4"`; this creates no slice state machine.
+
+## Bounded closure
+
+### CLOSURE-1 — record and hash
+
+Closure is bounded evidence, never a claim of full transitive completeness. Each record has:
+- `expected_write_set`: bounded paths/patterns, reason, and create/modify/delete type;
+- `reverse_dependency_searches`: anchor, method, roots, one-hop consumers, and disposition
+  for every changed exported/public/shared contract;
+- `selecting_tests_fixtures_helpers`: direct selectors/interpreters or negative evidence;
+- `triggered_ci_and_generated_artifacts`: affected jobs, generators, snapshots, schemas, and
+  required command/update or evidence-backed `NOT_APPLICABLE`;
+- `external_consumer_search`: bounded method/results only when acceptance is external;
+- `dynamic_discovery`: reflection, registry, plugin, string/config, and runtime-path signals;
+- `closure_hash`: SHA-256 over RFC 8785 canonical JSON of the preceding semantic fields.
+
+Timestamps, prose, and mutable status are excluded from `closure_hash`.
+
+### CLOSURE-2 — discovery gate
+
+An unresolved dynamic signal yields `DISCOVERY_REQUIRED` and forbids
+`PLANNED -> CLOSURE_PROVEN`. Targeted `Investigate` must include the consumer, prove it
+irrelevant, or route to re-slice/redesign. `CLOSURE_PROVEN` requires every bounded search and
+disposition to be current; missing direct tests/helpers/CI/generated/external consumers fail
+the proof.
+
+### CLOSURE-3 — expansion lineage
+
+Planning refinements before `READY` and duplicate/known-path clarifications consume nothing.
+The first distinct confirmed post-`READY` closure miss per `behavior_id` permits one automatic
+record expansion, new hash, applicable DoD, and independent full-range Review; it is not a
+semantic cycle. A second distinct miss requires `Investigate` plus bounded Oracle and routes
+to `RESLICE_REQUIRED` or `REDESIGN_REQUIRED`.
+
+## Phase 5 — WIP=1 slice execution
+
+### SLICE-1 — total transition relation
+
+Only these normal transitions are legal:
+
+```text
+PLANNED
+  -> CLOSURE_PROVEN | RESLICE_REQUIRED | REDESIGN_REQUIRED
+CLOSURE_PROVEN
+  -> READY
+READY
+  -> IMPLEMENTING
+  -> COMMITTED_CANDIDATE only for evidence-only recertification with unchanged OIDs,
+     freshly revalidated DoD, current closure hash, and current clean-status profile
+IMPLEMENTING
+  -> LOCAL_DOD_PASS | USER_DECISION_REQUIRED | HOST_RECOVERY_REQUIRED
+LOCAL_DOD_PASS
+  -> COMMITTED_CANDIDATE | IMPLEMENTING
+COMMITTED_CANDIDATE
+  -> INDEPENDENT_REVIEW_PASS | IMPLEMENTING | PLANNED
+  -> RESLICE_REQUIRED | REDESIGN_REQUIRED
+INDEPENDENT_REVIEW_PASS
+  -> ACCEPTED | COMMITTED_CANDIDATE | PLANNED
+ACCEPTED
+  -> PLANNED | RESLICE_REQUIRED | REDESIGN_REQUIRED on later invalidating evidence
+CLOSURE_PROVEN | READY | IMPLEMENTING | LOCAL_DOD_PASS | COMMITTED_CANDIDATE |
+INDEPENDENT_REVIEW_PASS | ACCEPTED
+  -> PLANNED on GRAPH-3 or semantic closure invalidation
 ```
-go build ./...                                  # build
-go vet <ТІЛЬКИ змінені пакети>                  # scoped static analysis
-go test <змінені області> ./... (relevant)       # relevant deterministic tests/final gate
-go test -race .                                 # де застосовно
-```
-- ⚠ **vet/lint скоупити на змінені пакети.** Передіснуючий шум репозиторію (напр. protobuf
-  copylocks) — НЕ gate; вкажи це явно в промпті orchestrate, інакше він зупиниться хибно.
-- Коміт після кожної адекватної зміни, conventional-стиль (`fix(scope): …`, `feat(…): …`).
-- Тест, що асертить значення, яке зовнішня система парсить (ES-таймаути, SQL, формати дат) —
-  має пінити **wire-формат**, а не лише «мок отримав щось» (мок ігнорує значення → P0 проскочить).
-- Behavior-preserving рефакторинг верифікується на **override/edge-кейсах**, не лише дефолтах.
 
-## Нагляд за orchestrate (обов'язково)
-- Моніторити через `agent_run op=wait` (він може ставити питання → `op=respond`). Два повні
-  long-poll windows з незмінним cursor, без unanswered interaction і без in-flight progress
-  дозволяють лише steer. Тиша сама не дозволяє cancellation, якщо її не можна відрізнити
-  від здорового reasoning.
-- Cancel/retry дозволено лише за позитивного доказу idle/no-progress після steer. Тоді
-  дозволений рівно один fresh, вужчий retry; передати йому повний workflow або leaf contract
-  verbatim разом з усіма binding, Git і `context_builder` requirements — не стислий переказ.
-  Якщо після steer позитивного idle evidence немає, не cancel: записати blocker. Другий
-  позитивно доведений stall retry-запуску — blocker. Пізнє валідне завершення оригінального
-  запуску supersede-ить ще unresolved blocker після звичайної перевірки output та identity.
-- **Out-of-scope зміни від orchestrate**: якщо зміна коректна — steer: «окремим комітом, і це
-  єдиний виняток; далі строго скоуп»; якщо ні — revert. Ніколи не дозволяй бандлити її в
-  крок-коміт.
-- **Після завершення — незалежна верифікація**: сам прожени DoD, подивись `git log --stat`
-  per-commit (санітарна перевірка скоупу), спот-чекни найризикованіші кроки. Build+тести
-  можуть бути зелені при зламаному консюмері (класика: Unmarshal повернув pointer, а консюмер
-  асертить value → метод тихо повертає nil).
-- Sentinel/error-identity: аліаси (`var Err… = pkg.Err…`, `type X = pkg.X`), НЕ нові значення;
-  текст повідомлення не міняти, якщо на нього є string-bridge (`strings.Contains`).
+The listed invalidation edge is legal from every named source and requires the applicable graph/closure evidence. Any nonterminal state may enter `HOST_RECOVERY_REQUIRED` or `USER_DECISION_REQUIRED`.
+The pause event stores `resume_state` plus exact graph, candidate, closure, and input hashes.
+Resolution returns to `resume_state` only if all hashes remain current; otherwise the
+applicable invalidation edge returns the node to `PLANNED`. Resolving
+`RESLICE_REQUIRED`/`REDESIGN_REQUIRED` returns replacement/affected nodes to `PLANNED` only
+after current Phase-3/4 authority exists. Every transition must be a validated
+`STATE_TRANSITION`; no implicit edge advances state.
 
-## Ролі агентів (agent_run model_id)
-- `explore` — ТІЛЬКИ вузькі read-only розвідки (1 конкретне питання), не review і не
-  імплементація; сесії прибирати одразу.
-- `pair` — усі review-проходи: `rp-review`, **nuclear**, **ponytail**, адверсарна
-  перевірка знахідок; може питати → відповідай.
-- `engineer` — виконання чітко обмежених implementation-підзадач, коли їх делегує
-  orchestrate.
-- `design` — bounded critique плану (критик, не співавтор).
-- `workflow_name="Orchestrate"` — імплементація по кроках та делегування `engineer`-агентам.
-- **nuclear** (структура/maintainability) і **ponytail** (видалення/over-engineering) —
-  individual skill leaves; запускати як `pair`-агентів з відповідною лінзою, ПАРАЛЕЛЬНО,
-  на діффі через перевірений absolute `SKILL.md` path. Для їх misfire застосовувати загальний
-  one-relaunch-per-leaf-per-gate-run contract вище; це launch failure, окремий від stall
-  evidence та stall-retry budget.
-- **rp-capstone-review** — host-level final gate. Immediately before its integrated entry
-  point, re-resolve the original logical discovery path and require the same canonical target;
-  open that target, require a regular file, read all bytes exactly once into a new immutable
-  buffer, and recheck byte length, SHA-256 та, коли pinned, tracked path/tree mode/type/blob OID
-  and byte equality to that blob. Виконати integrated contract з exact щойно перевірених bytes:
-  без третього path read, skill-name registry lookup або path-only invocation. Будь-яка
-  невідповідність — BLOCKED для поточного frozen run; replacement не можна re-pin/reverify
-  in-run, новий contract вимагає нового Phase-0 run. Parent conductor робить цю перевірку й
-  викликає повний verified contract після nuclear, ponytail та `Optimize`.
-  Не запускати capstone як RepoPrompt child, не обгортати й не повторювати externally його
-  internal leaves: capstone сам володіє їхнім lifecycle, а вся змістовна finding work лишається
-  в його fresh `pair` children. Capstone blocker блокує release; retained P0/P1 проходять
-  чинний code-remediation accounting, а будь-який patch інвалідовує Phase 6/7 і запускає
-  всі gates на новій identity за canonical loop rules.
-- Housekeeping: `agent_manage op=cleanup_sessions` після фіксації результату.
+### DOD-1 — portable validation floor
 
-## Чому фазу 7 не можна пропускати (перевірено практикою)
-Кожен шар ловить СВІЙ клас дефектів, які інші пропускають:
-- **ponytail** ловить консистентність типу value↔pointer/assertion і мертвий код, який
-  correctness-ревʼю і тести пропускають;
-- **nuclear** ловить over-engineering (спекулятивні абстракції, мертві policy-механізми) —
-  видаляй одразу, код має ЗМЕНШУВАТИСЬ після цієї фази;
-- **rp-capstone-review** ловить те, що всі попередні проходи пропустили (wire-format
-  баги, крос-системні контракти) через незалежні domain leaves і verification. Це фінальний
-  release gate.
-- **rp-optimize**: повний перф-цикл запускати лише коли є метрика/гарячий шлях; для
-  структурних змін чесно виконати Phase-1 scouting (пошук внесених неефективностей) і, якщо
-  чисто, зафіксувати N/A — не імітувати цикл.
+Before implementation, derive exact commands from repository instructions, CI, documented
+scripts, then ecosystem defaults. The portable floor is build/typecheck where applicable,
+scoped static analysis, relevant deterministic tests, and a final gate covering affected and
+shared/public surfaces. Any unavailable category needs evidence-backed `NOT_APPLICABLE`.
+Validation must pin wire formats parsed externally, exercise override/edge paths for
+behavior-preserving refactors, and preserve sentinel/error identity by alias where compatibility
+requires it. Each coherent change receives a forward conventional commit after applicable DoD.
 
-## Політика моделей
-- RepoPrompt-ролі використовують свої зареєстровані дефолти (`agent_manage op=list_agents`);
-  concrete agent або model ID не пінити. Внутрішні ролі capstone визначає його verified contract.
+### SLICE-2 — cumulative committed candidate
 
-## Промпт-гігієна для ревʼюерів
-- Known-intentional, backward-compat винятки та deferred known-minor передавати як complete
-  immutable known-context records; вони є evidence, а не waiver findings або governing rules.
-- Reviewer фази 6 передавай full base/head OID та повний опис immutable candidate identity.
-  Integrated capstone передавай exact canonical root, full base/head OIDs, complete promoted
-  Phase-6 record і digest, complete promoted closed-input manifest і digest та complete immutable
-  known-context records і digest. Capstone-required canonical structured-record digests виводь
-  з уже frozen/promoted material за canonicalization verified capstone contract, без recapture,
-  звуження surface або зміни identity; його schema тут не дублюй. Evidence чинний лише для
-  переданої identity.
-- Verify-фаза адверсарна: вердикти CONFIRMED/PLAUSIBLE/REFUTED, REFUTED відкидається.
-  Supplemental adversarial verify не замінює required review чи gate.
-- Диагностика LSP/IDE може бути спурйозною (стейл-індекс) — ground truth лише build/тести.
+On first execution, `slice_base` is current `accepted_head` or `run_base`; after invalidation it is the retained earliest base required by `GRAPH-3`. `slice_head` is full current `HEAD`
+after all implementation/remediation commits. `candidate_identity` covers the complete `slice_base..slice_head`, `behavior_id`, `closure_hash`, review-input hash, and a versioned
+clean-status record. Every Review and repeat Review covers that full range.
 
-## Анти-патерни (виключено з практики як неефективні)
-- 🚫 Писати план без фаз 1-2 (investigate/oracle) — план буде з дірками, які критик знайде пізніше й дорожче.
-- 🚫 Виконувати роботу built-in агентами, коли домовлено про rp-ce — усе через RepoPrompt-сабагентів.
-- 🚫 Запускати nuclear, ponytail або будь-який інший review через `explore`; review-роль — `pair`.
-- 🚫 Підміняти реальний RP workflow або skill переказом його інструкцій у довільному prompt.
-- 🚫 DoD-гейт на репо-wide vet/lint із передіснуючим шумом.
-- 🚫 Довіряти звіту orchestrate без власної верифікації.
-- 🚫 Приймати першу відповідь Oracle без критики.
-- 🚫 Пропускати required review-lens без доказу, що та сама lens уже виконана на тому самому effective diff; будь-яка зміна review surface інвалідує цей доказ.
-- 🚫 Порушувати two-epoch cap: відкривати третю remediation epoch, скидати exhausted second
-  epoch або робити заборонений local patch; user intent не може waive confirmed P0/P1.
-- 🚫 Після invalidated freeze продовжувати фазу 7 чи підміняти повний re-run малим diff або
-  adversarial verify.
-- 🚫 Cancel через саму тишу без positive idle/no-progress evidence; у вужчому retry скорочувати
-  workflow/leaf contract або губити binding, Git чи `context_builder` requirements.
-- 🚫 Спекулятивна загальність (політики/абстракції «на майбутнє», не підключені зараз) — MVP; додаси, коли підключиш.
-- 🚫 Фіксити знахідки, що міняють поведінку/скоуп, без рішення користувача.
-- 🚫 Лишати процес-артефакти (repro, investigation-доки) у shipping-гілці без явного рішення — зберігай на scratch-гілці (`git branch <name>-artifacts HEAD`).
+Profile v1 is RFC 8785 canonical JSON containing:
+- `head_oid` equal to full `slice_head`;
+- `index` and `tracked_worktree`, each empty plus SHA-256 of its normalized empty result;
+- `non_ignored_untracked` sorted path/type/content-hash entries, empty except exact
+  orchestration paths with current `PROVEN EXCLUDED` evidence or paths absent from the
+  recorded `CLEAN GATE WORKTREE`;
+- `submodules_gitlinks` sorted recursive path, tree gitlink OID, checked-out OID, and status;
+  missing/uninitialized, `+`, `-`, `U`, dirt, or mismatch blocks, while no submodules requires
+  evidence-backed `NOT_APPLICABLE`;
+- `commands_profile_version` and the exact commands/options used.
 
-## Фінальний звіт
-Таблиця комітів по кроках; starting SHA; повні фінальні base/head OID; Phase-4 Review input manifest;
-фінальні `plan_remediation_count` і `code_remediation_count`; candidate/promotion summary
-для cleanliness, submodules та untracked dispositions; усі recursive dirty-submodule identities,
-використані як proof; статус кожного gate фаз 6-7 саме на promoted frozen identity;
-що знайшов кожен шар ревʼю; divergence/escalation та stall/retry/blocker outcomes, якщо були;
-verification і фінальний clean/dirty status; known-latent/deferred список (щоб наступні ревʼю
-не ре-флагали); відкриті питання користувачу; посилання на summary у canonical ledger.
+Profile v1 captures exact raw output from `git rev-parse --verify HEAD`,
+`git diff --cached --binary`, `git diff --binary`,
+`git status --porcelain=v2 --untracked-files=all --ignore-submodules=none`,
+`git ls-files --others --exclude-standard -z`, `git ls-tree -r -z HEAD`,
+`git submodule status --recursive`, and recursive submodule
+`git status --porcelain=v2 --untracked-files=all`. Normalize lowercase full OIDs/SHA-256,
+UTF-8 paths sorted bytewise, exact status tokens, no timestamps/prose, and content hashes for
+permitted orchestration entries. `clean_status_hash` is SHA-256 of the canonical record
+excluding only that field.
+
+### REVIEW-1 — independent full-range review
+
+Immediately before launch, verify `head_oid`, empty index/tracked worktree, allowed untracked
+set, submodule/gitlink state, and `clean_status_hash`; mismatch forbids Review and invalidates
+any verdict. Standard `Review` always covers correctness, contract, tests, closure, and
+deletion/YAGNI over `slice_base..slice_head`.
+
+Run `rp-ponytail-review` under `CAPSTONE-1` when the slice introduces an abstraction/factory/adapter/strategy/policy/registry, dependency/wrapper over native capability, duplicate parallel helper/path, or speculative configurability. Run `rp-thermo-nuclear-code-quality-review` as thermo-nuclear under `CAPSTONE-1` for cross-module ownership, public/shared contract, state machine, concurrency/lifecycle/cancellation, persistence/migration/security/trust, or central orchestration ownership. A triggered lens is mandatory but advisory on severity; provider failure enters `HOST_RECOVERY_REQUIRED` and Oracle cannot waive it.
+If none applies, materialize the canonical all-false trigger evaluation for that identity and record one `REVIEW_VERDICT` with `verdict="NOT_APPLICABLE"`. Standard deletion review remains. No speculative generality is permitted: policy, abstraction, configurability, or mechanism not required by current `done_when` is a release-blocking P1, cannot be deferred/downgraded, and blocks `ACCEPTED` and promotion until removed and independently re-reviewed.
+
+### SLICE-3 — remediation and acceptance
+
+The parent maps every material finding to P0/P1/P2 by impact/evidence, then
+`CONFIRMED`/`PLAUSIBLE`/`REFUTED`. Before another patch or reviewer/Oracle scope, every
+material finding in the current bounded output must have a latest lossless disposition and
+every open `finding_id` must appear in the exact next input. Confirmed P0/P1 cannot be waived.
+P2 chosen for change completes before the next candidate; otherwise record defer/revisit.
+
+A confirmed/plausible P0/P1 authorizes one coherent fix under `BUDGET-1`, applicable DoD,
+forward commit/new `slice_head`, and independent full-range Review. Identity/closure/output
+hashes must remain current when `INDEPENDENT_REVIEW_PASS -> ACCEPTED` advances
+`accepted_head`. Out-of-scope changes are split into a separate authorized node/commit or
+reverted forward; they never hitchhike.
+
+## Event fold, budgets, and recovery
+
+### EVENT-1 — append-only chain
+
+The parent is sole writer. Each immutable chain generation has one append-only path `.tmp/rp-loop-engineering/<task-slug>/generations/<generation_id>/gate-events.jsonl`.
+Chain schema v1 fixes `chain_version=1` and `event_version=1`; each event contains those fields, `generation_id`, `run_id`, `sequence`, `previous_event_hash`, `event_type`, `scope`, applicable
+`slice_id`/`behavior_id`, `candidate_identity`, `evidence_refs[]`, versioned `payload`, and `event_hash`. Every v1 core/payload member is present; inapplicable scalars are JSON `null`, empty collections are `[]`, and unknown or missing members reject the event.
+Each line is one RFC 8785 canonical UTF-8 object plus LF, excluded from hashing. `event_hash` is lowercase SHA-256 over that object with only `event_hash` removed.
+
+A generation has exactly one `RUN_GENESIS` at sequence `0`, with `previous_event_hash` equal to 64 lowercase zeroes; later sequences increment by one and name the preceding full hash.
+Genesis payload v1 contains `predecessor`, `reconstruction`, and `imports`: respectively `null`, `null`, and `[]` for the first native generation; otherwise immutable predecessor path/ID,
+sealed byte length/SHA-256, last valid sequence/hash, failure signature, reconstruction path/SHA-256, and source path/content SHA-256 for every import.
+
+The closed event-type catalog is `RUN_GENESIS`, `CONTRACT_PIN`, `GRAPH_MANIFEST`,
+`CLOSURE_SNAPSHOT`, `CANDIDATE_SNAPSHOT`, `CHILD_OUTPUT`, `FINDING_DISPOSITION`,
+`STATE_TRANSITION`, `REVIEW_VERDICT`, `REMEDIATION_SEQUENCE`, `HOST_RECOVERY`,
+`INTEGRATED_FREEZE`, `RELEASE_GATE`, and `RUN_TERMINAL`.
+
+### EVENT-2 — deterministic fold
+
+Reducer v1 validates generation linkage, schema/version, run, sequence/chain/hash, referenced bytes, identity currency, and owning-clause prerequisites, then processes events in order.
+Pin/manifest/closure/candidate/output events establish immutable records only; semantic changes also require `GRAPH-3` invalidation and `STATE_TRANSITION`. `FINDING_DISPOSITION` alone updates the latest disposition for its `finding_id`.
+`STATE_TRANSITION` alone changes slice/pause state and binds `from`, `to`, nullable `resume_state`, and current graph/closure/candidate/input identities. `REVIEW_VERDICT` changes only its named gate after current `CHILD_OUTPUT` and `EVENT-3` closure.
+`REMEDIATION_SEQUENCE` alone increments its named Phase-4 or behavior lineage and binds findings, epoch/cycle, pre/post identities, applicable DoD/commit evidence, and subsequent Review. `HOST_RECOVERY` changes only host-epoch evidence; pause/resume still uses `STATE_TRANSITION`.
+`INTEGRATED_FREEZE`/`RELEASE_GATE` establish identity-bound records; `RUN_TERMINAL` applies only when the fold already proves `TERM-1`/`RELEASE-1`. No other event has those effects.
+
+Duplicate output content creates no second verdict or cycle. Out-of-order, missing, tampered,
+or missing-byte events cannot advance and enter recovery. Late output advances only when exact
+current candidate/closure/input hashes match; otherwise retain it as stale evidence.
+Corrections are superseding events, never edits. State, readiness, findings, counters, epochs,
+and terminals are fold outputs; mutable summaries have no authority.
+
+### EVENT-3 — lossless verdict evidence
+
+Every gate-advancing child verdict references `output_path`, `output_content_sha256`,
+`input_manifest_or_candidate_hash`, and `verdict`. If output is inline, before parsing,
+trimming, or advancement write the exact returned bytes to a write-once content-addressed path;
+for a string, use exact UTF-8 without added newline and record encoding. Re-read and verify the
+bytes, then reference them in `CHILD_OUTPUT`. Parent disposition records raw severity, mapped
+P0/P1/P2, adjudication, evidence, next owner/input, and resolution identity. A verdict cannot
+advance while any latest material finding lacks disposition or a confirmed/plausible P0/P1
+remains accepted-unfixed/deferred-blocking.
+
+### BUDGET-1 — semantic lineage
+
+Each stable `behavior_id` lineage permits three completed qualifying cycles per epoch and at
+most two epochs. A qualifying cycle is exactly: adjudicated `CONFIRMED`/`PLAUSIBLE` P0/P1,
+one coherent fix, applicable DoD, forward commit/new `slice_head`, and independent full-range
+Review. Baselines, duplicates, P2, incomplete sequences, closure misses, and host failures do
+not consume it. An incomplete sequence holds WIP and blocks a replacement patch.
+
+Before epoch 2, record a divergence summary, complete `Investigate`, and converge bounded
+Oracle. Exhausted epoch 2 yields `USER_DECISION_REQUIRED` only for a legitimate goal choice;
+otherwise `BLOCKED_WITH_PROOF`. No third epoch, reset, or local patch exists. Re-slice,
+re-attribution, integrated invalidation, and capstone rerun never reset or refund a lineage.
+
+### BUDGET-2 — recurrence tripwires
+
+Before another patch, goal-level `Investigate` plus bounded Oracle is mandatory when another
+distinct lineage already entered epoch 2 before the current lineage opens it, a lineage needs
+a second re-slice, or the same normalized invariant/authority class recurs in another slice.
+The fold derives goal aggregates without creating configurable caps.
+
+### ATTRIBUTION-1 — integrated finding lineage
+
+Before repairing an integrated/capstone P0/P1, record `affected_lineages` deterministically:
+one existing transition gets `[behavior_id]`; one inseparable fix across several transitions
+gets the sorted unique IDs; a release-boundary-only defect gets `["GLOBAL"]`. `GLOBAL` is one
+stable run-level lineage and cannot mix with other IDs. Ambiguity requires `Investigate` plus
+bounded Oracle before patching. Superseding attribution may correct evidence but never refunds
+cycles. A completed multi-lineage sequence charges every listed lineage once and requires
+budget in all; `GLOBAL` follows `BUDGET-1`. Repair reopens/creates attributed graph nodes,
+uses forward commits and slice Review, then repeats the whole integrated path.
+
+### RECOVERY-1 — typed host recovery
+
+Zero-tool, routing, transport, provider, binding, launch, event-chain, and supervision failures
+open a new `host_epoch` and never change candidate/closure identity or semantic/closure budget.
+For one failure signature, run each distinct action once: verify binding/inventory; fresh clean
+session with exact contract; permitted rebind/context recovery; verified contract-allowed
+fallback. Temporary unavailability pauses at `HOST_RECOVERY_REQUIRED`. Only proven absence of
+required capability with no resumable recovery yields `BLOCKED_WITH_PROOF`.
+
+A generation with a missing, invalid, or unverifiable event is sealed at its last validated
+event; never rewrite it or append behind the failure. Recovery may start only a fresh generation
+path whose genesis links the sealed predecessor and independently verified reconstruction/import
+bytes under `EVENT-1`. The fold verifies that linkage before accepting successor state; uncertain
+cycles are conservatively consumed and non-unique reconstruction yields `BLOCKED_WITH_PROOF`.
+A late completion may append to a healthy paused generation, or enter a successor only as a
+hash-verified import.
+
+## Phases 6–7 — integrated release only
+
+### FREEZE-1 — cumulative closed candidate
+
+Only after all nodes are `ACCEPTED`, build the integrated candidate over
+`run_base..accepted_head`. Define the canonical freeze universe as resolved DoD commands,
+Phase-6 `Review` including nested context building, and every Phase-7 gate. Create one closed
+allowed input/scope manifest covering every repository, worktree, submodule, external path,
+actor traversal/discovery bound, immutable known-context record/digest, and the complete
+`capstone_contract_record`. Detect every changed gitlink and include the exact already-reviewed
+transition record/digest required by the verified capstone contract; otherwise block.
+
+Capture full base/head OIDs, clean index/tracked state, manifest/digest, submodule OIDs/status,
+and enough path/type/content identity to detect create/delete/modify. Non-ignored untracked
+paths are immutably included, proven excluded, or cleaned before capture. Inspect ignored paths
+when covered, directly consumed, or potentially relevant as generated input, cache/config, or
+discovery target; include or exclude them under `FREEZE-2`. Dirty submodules block unless a
+recursive materialized-content identity is included in candidate and final report.
+
+### FREEZE-2 — exclusion boundary
+
+The canonical `EXCLUDED` predicate is:
+`((path is outside every permitted traversal/discovery bound) OR
+(every applicable command, Review/context invocation, and gate explicitly ignores it))
+AND path is not directly consumed by any actor in the freeze universe`.
+Ambiguity blocks. Integrated dirt blocks capture/promotion when covered or directly consumed
+and neither immutably included nor proven `EXCLUDED`.
+
+The orchestration event/output store may be outside the surface only as `PROVEN EXCLUDED`
+under that predicate, or under `CLEAN GATE WORKTREE`: all freeze-universe actors use the same
+recorded isolated clean materialized worktree, the store is absent there, and no actor reads
+the external orchestration worktree. If neither is proved, block before capture. Unrelated
+orchestration dirt satisfying either boundary is not a blanket blocker.
+
+### FREEZE-3 — read-only review and total invalidation
+
+Phase 6 is read-only and in-manifest. Out-of-manifest access aborts it and requires a new
+manifest/candidate. After exact `no P0-P1`, recompute identity only to prove equality; promote
+that same candidate without recapture. Any identity mismatch or mutation after capture
+invalidates Phase 6. Any post-promotion mutation invalidates every Phase-6/7 proof. In either
+case run applicable DoD, capture a new integrated candidate, repeat full Phase 6, promote only
+unchanged identity, and repeat every Phase-7 gate. Supplemental verification replaces no gate.
+
+### RELEASE-1 — global guard and order
+
+Immediately before promotion require zero unresolved safety-semantic contradictions and zero
+accepted-unfixed/deferred-blocking P0/P1 throughout governed scope. After unchanged promotion,
+run nuclear through exact `rp-thermo-nuclear-code-quality-review` and ponytail through exact `rp-ponytail-review` in parallel under `CAPSTONE-1`, then `Optimize` always: perform its Phase-1 scouting and
+continue its full loop only with a measurable metric/hot path, otherwise record evidence-backed
+`NOT_APPLICABLE`. Then run capstone under `RELEASE-2`. Per-slice acceptance, integrated
+capture, or promotion is never `RELEASED`. Only every gate passing on one unchanged promoted
+identity emits terminal `RELEASED`.
+
+### RELEASE-2 — capstone boundary
+
+Pass the verified capstone the canonical root, full base/head OIDs, complete promoted Phase-6
+record and digest, complete promoted closed-input manifest and digest, and immutable
+known-context records/digest derived without recapture. Reference its verified schema and
+lifecycle; do not duplicate them. A retained capstone P0/P1 blocks release, is attributed by
+`ATTRIBUTION-1`, and any repair follows slice execution plus full integrated invalidation.
+
+## Resume, migration, and report
+
+### MIGRATION-1 — legacy compatibility
+
+A run begun under an older pinned contract with `.tmp/rp-loop-engineering/<task-slug>/gate-ledger.md` either finishes under those exact bytes or starts a fresh generation whose `RUN_GENESIS` reconstruction/import linkage records the legacy source path and content SHA-256 for every independently verified Git/raw-output item. The legacy ledger remains read-only historical evidence outside the candidate surface; never convert it, rewrite a chain, or synthesize missing events from mutable headings, counters, or summaries. Unresolved legacy findings remain open until a parent adjudication event binds them to verified evidence and current candidate/input identity. Ambiguous prior attempts are conservatively consumed; inability to reconstruct uniquely with source hashes and dispositions yields `BLOCKED_WITH_PROOF`.
+
+### REPORT-1 — fold-derived handoff
+
+The final report is derived from the validated fold and includes `run_id`; `run_base` and
+full final OIDs; graph/closure/Phase-4 manifest hashes; commits and DoD; each slice range,
+review, risk-lens verdict, status, and lineage budget; goal tripwires and `host_epoch` history;
+integrated manifest/candidate/promotion identities; all Phase-6/7 outcomes; findings and
+attribution; deferred/revisit items; blockers/pauses; and final clean/dirty status. It links
+immutable evidence rather than reproducing transcripts and reports exactly one terminal.
