@@ -27,10 +27,12 @@ Schema discovery (prefer these over hand-written SQL):
 Data and analysis:
 - `execute_sql` — run a read-only SELECT. Use for actual data questions.
 - `explain_query` — execution plan and cost of a query.
-- `get_top_queries` — slowest / most resource-intensive queries
-  (pg_stat_statements).
+- `get_top_queries` — slowest / most resource-intensive queries (needs the
+  `pg_stat_statements` extension created in the DB; may error if it is not).
 - `analyze_db_health` — index/connection/vacuum/replication health checks.
-- `analyze_workload_indexes`, `analyze_query_indexes` — index recommendations.
+- `analyze_workload_indexes`, `analyze_query_indexes` — index recommendations
+  (require the `hypopg` extension, which is NOT installed on this cluster —
+  expect these to fail; do not retry them).
 
 ## Hard rules
 - **Never** use `psql`, `mysql`, the shell, a raw connection string, or any
@@ -49,7 +51,9 @@ Data and analysis:
   Most business data (tenants, campaigns, accounts) lives in `sc`.
 - Not accessible (by design): `django`, `staging`, `public_admin` — catalog
   tools may list them, but reading their data is denied.
-- Statement timeout for the LLM role: 60s. Connection limit: 10.
+- Query time cap: the MCP's restricted mode enforces its own ~30s limit per
+  query ("timed out after 30 seconds in restricted mode"). Keep queries
+  selective; add WHERE/LIMIT. Connection limit: 10 per user.
 
 ## Examples
 - "What schemas are there?" → `list_schemas`.
