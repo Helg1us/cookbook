@@ -1,0 +1,4 @@
+interface:
+  display_name: "GoLand MCP"
+  short_description: "Use GoLand IDE analysis and project tools"
+  default_prompt: "Use GoLand MCP to inspect and work with the current IDE project."

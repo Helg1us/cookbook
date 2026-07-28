@@ -1,6 +1,6 @@
 ---
 name: commit
-description: Create safe, atomic git commits with Conventional Commit messages and gitmoji-style emoji. Use when the user explicitly asks to commit changes, split work into commits, write a commit message, or prepare local git changes for committing.
+description: Create safe, atomic git commits with Conventional Commit messages. Use when the user explicitly asks to commit changes, split work into commits, write a commit message, or prepare local git changes for committing.
 disable-model-invocation: true
 allowed-tools:
   - Bash(git status:*)
@@ -59,36 +59,37 @@ Create focused git commits from the current repository state. Optimize for prese
 Use this format unless the repository has a stricter convention:
 
 ```text
-<type>(<scope>): <emoji> <imperative summary>
+<type>(<scope>): <imperative summary>
 ```
 
 Rules:
 
 - Keep the subject at or under 72 characters when practical.
 - Use imperative mood: "add", "fix", "update", not "added" or "fixed".
-- Prefer a precise scope when it improves scanability.
-- Omit the scope when it does not add useful information.
+- Use a precise scope whenever the change maps to a recognizable subsystem,
+  package, or documentation area.
+- Omit the scope only for genuinely cross-cutting changes or when no meaningful
+  scope exists.
 - Use `!` after the type or scope for breaking changes.
 - Add a commit body for non-obvious why, compatibility notes, migrations, or breaking changes.
-- If the repository already uses leading gitmoji subjects, match that local convention instead.
 
-## Type And Emoji Map
+## Type Map
 
-- `feat`: ✨ user-visible feature
-- `fix`: 🐛 bug fix
-- `docs`: 📝 documentation
-- `style`: 💄 formatting or presentation-only change
-- `refactor`: ♻️ restructuring without behavior change
-- `perf`: ⚡ performance improvement
-- `test`: ✅ tests
-- `chore`: 🔧 maintenance, dependencies, config, generated assets
-- `build`: 🏗️ build system or packaging
-- `ci`: 🚀 CI/CD workflow change
-- `revert`: ⏪ revert
+- `feat`: user-visible feature
+- `fix`: bug fix
+- `docs`: documentation
+- `style`: formatting or presentation-only change
+- `refactor`: restructuring without behavior change
+- `perf`: performance improvement
+- `test`: tests
+- `chore`: maintenance, dependencies, config, generated assets
+- `build`: build system or packaging
+- `ci`: CI/CD workflow change
+- `revert`: revert
 
-Use the closest standard Conventional Commits type. Express finer categories as scopes when useful, such as `fix(security): 🔒 validate token`, `chore(deps): 📌 pin runtime`, `refactor(db): 🗃️ rename migration`, or `fix(a11y): ♿ label menu button`.
+Use the closest standard Conventional Commits type. Express finer categories as scopes when useful, such as `fix(security): validate token`, `chore(deps): pin runtime`, `refactor(db): rename migration`, or `fix(a11y): label menu button`.
 
-For reverts, prefer `revert: ⏪ <original subject>` and include body context such as `This reverts commit <hash>.` when a specific commit is being reverted.
+For reverts, prefer `revert: <original subject>` and include body context such as `This reverts commit <hash>.` when a specific commit is being reverted.
 
 ## Split Heuristics
 
