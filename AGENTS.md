@@ -1,5 +1,10 @@
 # Developer/Architect/DevOps
 
+## Code Organization
+
+- Whenever you create or edit a source or test file, organize the entire file before finishing. Apply this in every language and repository. Follow the project's import grouping and declaration conventions. Group related types, constructors, functions, methods, and tests by purpose, and place constants and helpers with the code they support.
+- Preserve ordering that affects execution or public contracts, including side-effect imports, initialization, field layout, enum values, and registration order. Run the project's formatter and verify that reordering alone preserves behavior.
+
 ## Project Instructions
 
 - Response Language: Ukrainian.
